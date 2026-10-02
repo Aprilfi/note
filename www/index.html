@@ -122,7 +122,7 @@ button{border:none;border-radius:12px;padding:9px 12px;cursor:pointer;font-weigh
 .drag-ghost .drag-hint{display:block;margin-top:6px;font-size:12.5px;color:#b04075;font-weight:bold}
 
 /* ---------- 分区（心愿 / 复盘共用） ---------- */
-.wish-group{margin-bottom:14px}
+.item-group{margin-bottom:14px}
 .group-head{display:flex;align-items:center;gap:8px;padding:9px 12px;background:#ffe4f0;
   border-radius:14px;margin-bottom:8px;-webkit-user-select:none;user-select:none;
   -webkit-touch-callout:none}
@@ -550,6 +550,10 @@ body{
   <div class="form-row">
     <label>物品名称</label>
     <input id="purEditName">
+  </div>
+  <div class="form-row">
+    <label>分区</label>
+    <select id="purEditGroup"></select>
   </div>
   <div class="form-row">
     <label>物品类别</label>
@@ -1172,11 +1176,15 @@ function renderWishListPage(){
 function renderWishList(){
   const container=$("wishListContainer");
   const bought=purchasedIds();
-  const all=getWishes();
+  /* 先做分区归位，再取条目的引用。
+     反过来的话（先 getWishes 再 ensureWishGroups），确保归位的是一份新解析出来的对象，
+     手上这份 arr 的 groupId 还是 undefined，老数据升级后第一次渲染会整片看不见。 */
+  const eg=ensureWishGroups();
+  const groups=eg.groups;
+  const all=eg.items;
   let arr=all.filter(w=>!bought[w.id]);
   if(arr.length!==all.length) saveWishes(arr);
 
-  const groups=ensureWishGroups().groups;
   if(appState.wishCatFilter) arr=arr.filter(w=>w.category===appState.wishCatFilter);
 
   $("wishTopStats").innerHTML=`🐾 心愿清单共 <b>${arr.length}</b> 条 · <b>${groups.length}</b> 个分区<br>`+
@@ -1202,7 +1210,7 @@ function renderWishList(){
   groups.forEach(g=>{
     const items=arr.filter(w=>w.groupId===g.id);
     html+=`
-<div class="wish-group" data-gid="${g.id}">
+<div class="item-group" data-gid="${g.id}">
   <div class="group-head" data-gid="${g.id}">
     <span class="group-grip">⋮⋮</span>
     <span class="group-title">${esc(g.title)}</span>
@@ -1331,7 +1339,7 @@ function enableSortable(container, kind){
      那样很难拖准，而且体验也差。整块都是拖放目标更好用。 */
   function groupUnderY(clientY){
     let best=null, bestD=Infinity;
-    container.querySelectorAll(".wish-group").forEach(g=>{
+    container.querySelectorAll(".item-group").forEach(g=>{
       if(bestD===0) return;
       const r=g.getBoundingClientRect();
       if(clientY>=r.top && clientY<=r.bottom){ best=g; bestD=0; return; }
@@ -1425,7 +1433,7 @@ function enableSortable(container, kind){
       const fromIdx=arr.findIndex(x=>x.id===id);
       if(fromIdx<0) return;
       const moved=arr.splice(fromIdx,1)[0];
-      if(target.classList.contains("wish-group") || target.classList.contains("group-items")){
+      if(target.classList.contains("item-group") || target.classList.contains("group-items")){
         moved.groupId=target.dataset.gid;
         arr.push(moved);
       }else{
@@ -1671,7 +1679,10 @@ function monthLabel(key){
 }
 function renderReviewPage(){
   const container=$("purchaseListContainer");
-  const all=[...getPurchases()];
+  /* 同心愿清单：先归位分区再取数据，否则老数据第一次渲染会看不到 */
+  const eg=ensurePurchaseGroups();
+  const groups=eg.groups;
+  const all=[...eg.items];
 
   /* 月份下拉：只列出有记录的月份，方便按月查看 */
   const monthSet={};
@@ -1686,30 +1697,18 @@ function renderReviewPage(){
   const kw=(appState.purchaseSearchText||"").toLowerCase();
   if(kw) arr=arr.filter(p=>p.name.toLowerCase().includes(kw)||(p.feel&&p.feel.toLowerCase().includes(kw)));
   if(appState.purchaseMonth) arr=arr.filter(p=>monthKeyOf(p.createdAt)===appState.purchaseMonth);
-  arr.sort((a,b)=>Date.parse(b.createdAt)-Date.parse(a.createdAt));
+  /* 不再按时间自动排序：手动拖拽排序和它冲突，数组顺序就是显示顺序 */
+
   const total=arr.reduce((s,p)=>s+(Number(p.price)||0),0);
   $("purchaseFilterStats").innerHTML=`🛒 共 <b>${arr.length}</b> 条购入记录 · 合计花销 <b>${money(total)}</b> 元`
-    +(appState.purchaseMonth?`（${monthLabel(appState.purchaseMonth)}）`:"");
+    +(appState.purchaseMonth?`（${monthLabel(appState.purchaseMonth)}）`:"")
+    +` · <b>${groups.length}</b> 个分区<br>`
+    +`<span style="font-size:13px">长按条目可以拖动：放到别的条目上下=排序，拖到别的分区=归纳</span>`;
 
-  /* 同一年的不同月份之间分开显示 */
-  const groupStat={};
-  arr.forEach(p=>{
-    const k=monthKeyOf(p.createdAt);
-    if(!groupStat[k]) groupStat[k]={n:0,sum:0};
-    groupStat[k].n++;
-    groupStat[k].sum+=Number(p.price)||0;
-  });
   const stateText={good:"✅ 好用满意",waste:"⚠️ 踩雷后悔",idle:"🟡 闲置吃灰"};
-  let html="",lastMonth="__none__";
-  arr.forEach(p=>{
-    const mk=monthKeyOf(p.createdAt);
-    if(mk!==lastMonth){
-      lastMonth=mk;
-      const g=groupStat[mk];
-      html+=`<div class="month-head">${monthLabel(mk)}<span>${g.n} 笔 · 合计 ${money(g.sum)} 元</span></div>`;
-    }
-    html+=`
-<div class="item-card">
+
+  const card=p=>`
+<div class="item-card" data-id="${p.id}" data-gid="${p.groupId}">
   <div><span class="item-title">${CAT_ICON[p.category]||"🎀"} ${esc(p.name)}</span></div>
   <div style="margin-top:6px">
     <span class="tag">${CAT_MAP[p.category]||"其他"}</span>
@@ -1717,12 +1716,30 @@ function renderReviewPage(){
     <span class="tag">价格 ${money(p.price)} 元</span>
     ${Number(p.budgetPrice)>0&&Number(p.budgetPrice)!==Number(p.price)?`<span class="tag">原价格 ${money(p.budgetPrice)} 元</span>`:""}
   </div>
-  <div class="item-note">📅 购买时间：${fmtDate(p.createdAt)}</div>
+  <div class="item-note">📅 购买时间：${fmtDate(p.createdAt)}　（${monthLabel(monthKeyOf(p.createdAt))}）</div>
   <div class="item-note">💗 使用感受：${esc(p.feel)||"还没写，点【编辑】补充"}</div>
   <div class="card-actions">
     <button class="btn-edit edit-pur-btn" data-id="${p.id}">编辑</button>
     <button class="btn-del del-pur-btn" data-id="${p.id}">删除</button>
   </div>
+</div>`;
+
+  let html="";
+  groups.forEach(g=>{
+    const items=arr.filter(p=>p.groupId===g.id);
+    const gsum=items.reduce((s,p)=>s+(Number(p.price)||0),0);
+    html+=`
+<div class="item-group" data-gid="${g.id}">
+  <div class="group-head" data-gid="${g.id}">
+    <span class="group-grip">⋮⋮</span>
+    <span class="group-title">${esc(g.title)}</span>
+    <span class="group-count">${items.length} 笔 · ${money(gsum)} 元</span>
+    <span class="group-ops">
+      <button class="btn-edit group-rename" data-gid="${g.id}">改名</button>
+      <button class="btn-del group-del" data-gid="${g.id}">删</button>
+    </span>
+  </div>
+  <div class="group-items" data-gid="${g.id}">${items.map(card).join("")}</div>
 </div>`;
   });
   if(arr.length===0){
@@ -1730,8 +1747,12 @@ function renderReviewPage(){
       ? '<div class="card" style="text-align:center;color:#9a7386">没有符合条件的记录，换个关键词或月份试试～</div>'
       : '<div class="card" style="text-align:center;color:#9a7386">还没有购入记录，心愿下单后会自动转移到这里～</div>';
   }
+  html+=`<button class="btn-edit btn-wide" id="addPurGroupBtn" style="margin-top:6px">＋ 新增分区</button>`;
   container.innerHTML=html;
+
   container.querySelectorAll(".edit-pur-btn").forEach(btn=>btn.onclick=()=>openPurchaseEdit(btn.dataset.id));
+  container.querySelectorAll(".group-rename").forEach(btn=>btn.onclick=()=>openGroupModal("purchase",btn.dataset.gid));
+  container.querySelectorAll(".group-del").forEach(btn=>btn.onclick=()=>delGroup("purchase",btn.dataset.gid));
   container.querySelectorAll(".del-pur-btn").forEach(btn=>btn.onclick=async()=>{
     const item=getPurchases().find(x=>x.id===btn.dataset.id);
     const ok=await showConfirm("删除复盘记录","确认删除【"+(item?item.name:"")+"】的复盘记录吗？删除后不可恢复。");
@@ -1739,11 +1760,17 @@ function renderReviewPage(){
     savePurchases(getPurchases().filter(p=>p.id!==btn.dataset.id));
     renderReviewPage();
   });
+  const agb=$("addPurGroupBtn");
+  if(agb) agb.onclick=()=>openGroupModal("purchase",null);
+  enableSortable(container,"purchase");
   drawSpendChart(arr);
 }
 function openPurchaseEdit(id){
   const p=getPurchases().find(x=>x.id===id);
   if(!p) return;
+  const groups=ensurePurchaseGroups().groups;
+  $("purEditGroup").innerHTML=groups.map(g=>`<option value="${g.id}">${esc(g.title)}</option>`).join("");
+  $("purEditGroup").value=p.groupId||groups[0].id;
   $("purEditId").value=p.id;
   $("purEditName").value=p.name;
   $("purEditCategory").value=p.category||"other";
@@ -1760,6 +1787,7 @@ function savePurchaseEdit(){
   const name=$("purEditName").value.trim();
   if(!name){alert("请填写物品名称");return;}
   arr[idx].name=name;
+  arr[idx].groupId=$("purEditGroup").value;
   arr[idx].category=$("purEditCategory").value;
   arr[idx].price=Number($("purEditPrice").value)||0;
   arr[idx].state=$("purEditState").value;
