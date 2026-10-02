@@ -5,6 +5,8 @@
 
 原文件 `卜卜迷你工作台D.html` **没有被改动**，改的是复制出来的 `www/index.html`。
 
+远程仓库：https://github.com/Aprilfi/note.git
+
 ---
 
 ## 出 APK 只需要一条命令
@@ -197,3 +199,77 @@ Gradle 的 `buildscript` 块会被提前单独求值，读不到脚本里的局�
 **PowerShell 脚本必须保持 UTF-8 带 BOM。**
 `tools/` 下的 `.ps1` 里有中文，Windows PowerShell 5.1 默认按 GBK 读，
 存成无 BOM 的 UTF-8 会直接报语法错误。用编辑器改完注意别把编码改掉。
+## 版本管理
+
+### 日常提交
+
+```powershell
+cd C:\Users\utgb3\Desktop\temp\apk-build
+git add -A
+git commit -m "改了什么"
+git push
+```
+
+`node_modules`、`.toolchain`（2.3GB）、构建产物、签名文件都已被 `.gitignore` 排除，
+整个仓库只有 **约 1.2 MB**，随便提交。
+
+### 版本号只改一处
+
+`package.json` 的 `version` 是**唯一来源**，`android/app/build.gradle` 会自动换算：
+
+| package.json | versionName | versionCode |
+| --- | --- | --- |
+| `1.0.0` | `"1.0.0"` | `10000` |
+| `1.2.3` | `"1.2.3"` | `10203` |
+
+换算规则是 `major*10000 + minor*100 + patch`。**这个规则不要改** ——
+`versionCode` 必须是单调递增的整数，Google Play 靠它判断新旧，
+改了规则可能算出比上一版更小的值，新包就传不上去。
+带后缀的版本（如 `1.2.3-beta1`）会先按 `-` 切掉后缀再算。
+
+### 发一个版本
+
+```powershell
+# 1. 改 package.json 里的 version
+# 2. 编译
+npm run build:release
+# 3. 提交并打标签
+git add -A
+git commit -m "发布 1.1.0"
+git tag v1.1.0
+git push
+git push --tags
+# 4. 到 GitHub 的 Releases 页面把 APK 传上去
+```
+
+产物文件名默认是 `app-release.apk`，**传到 Release 时记得改名带上版本号**
+（如 `bubu-workbench-1.1.0.apk`），否则过两周就分不清哪个包是哪版了。
+
+### 凭据与权限（重要）
+
+凭据由 Git Credential Manager 管理，里面存的是一个 **Personal Access Token**。
+
+**当前这个令牌没有 `workflow` 权限**，所以 `.github/workflows/` 下的文件推不上去。
+这就是 `.github/workflows/android.yml`（云端编译配置）暂时没进版本库的原因 ——
+文件还在本地磁盘上，没被删除。要启用云端编译，二选一：
+
+1. 到 GitHub 新建一个勾选 `workflow` 权限的令牌，然后
+   `git-credential-manager github logout`，再 push 一次重新登录；
+2. 或者直接在 GitHub 网页上新建这个文件（网页端不受该限制）。
+
+之后 `git add .github && git commit -m "加上云端编译" && git push` 即可。
+
+### 数据格式版本（和 app 版本是两回事）
+
+应用数据存在 `localStorage` 里，导出的备份文件里有个 `version: 2` ——
+这是**数据格式**版本，和上面说的 app 版本、versionCode 完全无关。
+
+改数据结构（加字段、改字段名、改嵌套）时，用户机器上那份老数据会读不出来。
+代码里已经有先例：`migrateWishData()` 就是把老字段 `budget` 升级成 `price` 的。
+
+规则：**每次改数据结构就把备份格式的 version 加 1，写一个对应的迁移函数，
+启动时按版本号逐级升级。永远不要直接改老字段的含义。**
+这是唯一一处改错了会丢数据的地方。
+
+---
+
