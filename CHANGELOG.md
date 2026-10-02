@@ -23,6 +23,9 @@
 - `www/version.js` 由编译脚本依据 `package.json` 自动生成，
   应用内用 `@capacitor/app` 的 `getInfo()` 读取真实安装的版本，
   浏览器预览时退回读这个文件
+- `npm run install:release` / `install:debug`：自动找 `adb` 并把包装到设备上
+  （本机没把 platform-tools 加进 PATH）
+- README 重写为流程导向的《开发与发布手册》
 
 ### 变更
 

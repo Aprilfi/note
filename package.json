@@ -11,6 +11,8 @@
     "android-assets": "powershell -ExecutionPolicy Bypass -File tools/make-android-assets.ps1",
     "build:debug": "powershell -ExecutionPolicy Bypass -File tools/build-apk.ps1",
     "build:release": "powershell -ExecutionPolicy Bypass -File tools/build-apk.ps1 -Variant release",
+    "install:release": "powershell -ExecutionPolicy Bypass -File tools/install-apk.ps1 -Variant release",
+    "install:debug": "powershell -ExecutionPolicy Bypass -File tools/install-apk.ps1 -Variant debug",
     "toolchain": "powershell -ExecutionPolicy Bypass -File tools/build-apk.ps1 -ToolchainOnly",
     "gradle:debug": "cap sync android && cd android && gradlew.bat assembleDebug",
     "clean": "cd android && gradlew.bat clean"
