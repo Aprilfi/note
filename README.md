@@ -370,19 +370,18 @@ apk-build/
 
 ### 云端编译（GitHub Actions）
 
-`.github/workflows/android.yml` 已经写好了：推到 GitHub 后在 Actions 页面
-会自动编译并产出 APK。**但这个文件目前还没进版本库**，原因是
-Git Credential Manager 里存的那个 Personal Access Token 没有 `workflow` 权限，
-GitHub 拒绝推送 `.github/workflows/` 下的文件。
+`.github/workflows/android.yml` **已经启用**：往 `main` 推代码就会在 GitHub 上
+自动编译并产出 APK，跑完在构建记录的 **Artifacts** 里下载 `bubu-workbench-debug`。
+也可以在仓库的 Actions 页面手动点 **Run workflow** 触发。
 
-要启用，二选一：
+好处是本机什么都不用装；代价是每次要推一次仓库、等 3-5 分钟。
+本机能 40 秒出包，所以日常还是本地编，云端这条留作备份和「换台电脑也能出包」的兜底。
 
-1. 到 GitHub 新建一个**勾选 `workflow` 权限**的令牌，然后
-   `git-credential-manager github logout`，再 push 一次重新登录，
-   最后 `git add .github && git commit -m "加上云端编译" && git push`
-2. 或者直接在 GitHub 网页上新建这个文件（网页端不受该限制）
-
-本机已经能正常编译，所以这件事不着急。
+> **SSH 与令牌的区别**：这个文件一开始推不上去，报的是
+> `refusing to allow an OAuth App to create or update workflow ... without 'workflow' scope`。
+> 原因是 HTTPS 走的是 Personal Access Token，而那个令牌没有 `workflow` 权限，
+> GitHub 不允许它创建 `.github/workflows/` 下的文件。
+> **改用 SSH 之后就不受这个限制了** —— SSH 按账号鉴权，不经过令牌的权限体系。
 
 ---
 
@@ -470,3 +469,5 @@ Android Studio 那边的镜像配置（SDK 更新源、SDK 基础地址覆盖等
 | 模拟器窗口上下被切掉 | 用桌面 `Android模拟器\启动模拟器.bat` 启动，别从 Device Manager 点 ▶ |
 | 改完网页但手机上没变化 | 忘了同步。`npm run build:release` 已内含 `cap sync`，直接跑它就行 |
 | 设置页版本号显示不出来 | 检查 `www\version.js` 是否存在、`index.html` 里有没有引入它 |
+| 推 `main` 报 GitHub 连不上 | `github.com` 的解析 IP 偶发被墙。用 SSH 远程（走 22 端口）比 HTTPS 稳；实在不行过一阵再推 |
+| 推 `.github/workflows/` 被拒，提示缺 `workflow` 权限 | HTTPS + 令牌的限制。把远程换成 SSH 即可绕过，见第 8 节 |

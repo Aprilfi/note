@@ -26,6 +26,11 @@
 - `npm run install:release` / `install:debug`：自动找 `adb` 并把包装到设备上
   （本机没把 platform-tools 加进 PATH）
 - README 重写为流程导向的《开发与发布手册》
+- 配置 SSH 密钥（`~/.ssh/id_ed25519`，ed25519 无口令），远程地址改为
+  `git@github.com:Aprilfi/note.git`。HTTPS 走令牌容易被墙且受权限限制，
+  SSH 走 22 端口更稳
+- 启用 GitHub Actions 云端编译（`.github/workflows/android.yml` 终于能推上去了，
+  SSH 不受令牌的 `workflow` 权限限制）
 
 ### 变更
 
