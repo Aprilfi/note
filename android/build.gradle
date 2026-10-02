@@ -1,0 +1,58 @@
+// Top-level build file where you can add configuration options common to all sub-projects/modules.
+
+// ------------------------------------------------------------
+// 国内网络适配
+//
+// 这里 maven.google.com 和 repo1.maven.org 都连不上，所以把阿里云的代理
+// 仓库排在 google() / mavenCentral() 前面 —— 镜像内容与官方一致，能命中
+// 就不会再去碰不可达的官方源。仓库顺序很关键，官方源在前会一直卡在连接超时。
+//
+// 为什么不抽成变量：buildscript 块会被 Gradle 提前单独求值，读不到脚本里的
+// 局部变量，写 cnMirrors 会报 "Could not get unknown property"。
+// 所以下面这段镜像 URL 必须重复写三次，改的时候三处一起改。
+//
+// allprojects 里那份是给各个 Capacitor 插件模块用的：它们自己的 build.gradle
+// 也声明了 google() / mavenCentral()，而 allprojects 在根工程求值时就执行，
+// 早于子工程，因此镜像对它们同样排在最前面。
+// ------------------------------------------------------------
+
+buildscript {
+
+    repositories {
+        maven { url 'https://maven.aliyun.com/repository/google' }
+        maven { url 'https://maven.aliyun.com/repository/public' }
+        maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.7.2'
+        classpath 'com.google.gms:google-services:4.4.2'
+
+        // NOTE: Do not place your application dependencies here; they belong
+        // in the individual module build.gradle files
+    }
+}
+
+apply from: "variables.gradle"
+
+allprojects {
+    buildscript {
+        repositories {
+            maven { url 'https://maven.aliyun.com/repository/google' }
+            maven { url 'https://maven.aliyun.com/repository/public' }
+            maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
+        }
+    }
+    repositories {
+        maven { url 'https://maven.aliyun.com/repository/google' }
+        maven { url 'https://maven.aliyun.com/repository/public' }
+        maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
+        google()
+        mavenCentral()
+    }
+}
+
+task clean(type: Delete) {
+    delete rootProject.buildDir
+}

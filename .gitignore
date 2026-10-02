@@ -1,0 +1,28 @@
+# ---- Node ----
+node_modules/
+npm-debug.log*
+
+# ---- 便携工具链（每个机器自己下载，不进版本库）----
+.toolchain/
+
+# ---- 安卓编译产物（不进版本库，体积大且可重建）----
+android/build/
+android/app/build/
+android/.gradle/
+android/.idea/
+android/local.properties
+android/capacitor-cordova-android-plugins/build/
+
+# ---- 签名文件千万别提交 ----
+*.jks
+*.keystore
+keystore.properties
+
+# ---- 输出 ----
+dist/
+*.apk
+*.aab
+
+# ---- 系统 ----
+.DS_Store
+Thumbs.db

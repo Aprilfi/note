@@ -1,0 +1,1593 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>卜卜迷你工作台</title>
+<meta name="theme-color" content="#fff0f6">
+<link rel="manifest" href="./manifest.json">
+<link rel="icon" href="./icons/icon-192.png">
+<link rel="apple-touch-icon" href="./icons/icon-192.png">
+<!-- Chart.js 本地化：APK 离线时不再依赖 CDN（原为 https://cdn.jsdelivr.net/npm/chart.js@4.4.8/...） -->
+<script src="./chart.umd.min.js"></script>
+<!-- 原生外壳桥接：返回键 / 安全区 / 导出下载兜底。全部逻辑集中在 native-bridge.js -->
+<script src="./native-bridge.js"></script>
+<style>
+*{box-sizing:border-box;font-family:system-ui,-apple-system,sans-serif;margin:0;padding:0;}
+body{background:#fff0f6;color:#444;padding:14px 14px 88px;line-height:1.5}
+body.custom-bg{background-image:none;background-size:cover;background-position:center;background-attachment:fixed}
+.bg-mask{position:fixed;inset:0;background:rgba(255,255,255,.6);pointer-events:none;z-index:0}
+.wrap{position:relative;z-index:1;max-width:760px;margin:0 auto}
+
+/* ---------- 一级 / 二级 / 三级导航 ---------- */
+/* 顶部一级菜单：等宽单行，不再换行显得拥挤 */
+.top-tab-wrap{display:flex;flex-wrap:nowrap;gap:8px;margin-bottom:14px}
+.top-tab{flex:1 1 0;min-width:0;padding:10px 6px;border:none;border-radius:99px;background:#f8c8e0;color:#882e60;font-weight:bold;font-size:15.5px;line-height:1.2;white-space:nowrap;overflow:hidden;text-align:center;cursor:pointer;transition:0.25s}
+.top-tab.active{background:#e878a2;color:#fff;box-shadow:0 0 0 3px #e878a240}
+
+/* 二级菜单：同样等宽单行 */
+.sub-tab-wrap{display:flex;flex-wrap:nowrap;gap:8px;margin-bottom:14px}
+.sub-tab{flex:1 1 0;min-width:0;padding:7px 6px;border:none;border-radius:99px;background:#f9d9e8;color:#772658;font-size:13.5px;line-height:1.2;white-space:nowrap;overflow:hidden;text-align:center;cursor:pointer;transition:0.2s}
+.sub-tab.active{background:#e878a2;color:#fff}
+
+/* 一级菜单移到底部 TabBar */
+.top-tab-wrap{position:fixed;left:0;right:0;bottom:0;z-index:100;margin:0;padding:8px 6px calc(8px + env(safe-area-inset-bottom));background:#fff9fc;box-shadow:0 -2px 12px #00000014;border-top:1px solid #ffe4f0}
+.top-tab{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:6px 4px;border-radius:14px;background:transparent;color:#a9698c;font-size:11.5px;font-weight:bold;line-height:1.1;box-shadow:none}
+.top-tab.active{background:#f8c8e0;color:#882e60;box-shadow:none}
+.top-tab .bn-ico{font-size:17px;line-height:1}
+
+/* 折叠式板块（考公 / 健康 / 社会化），去掉二级导航 */
+.acc{margin-bottom:12px}
+.acc-head{width:100%;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:11px 14px;border:none;border-radius:16px;background:#f8c8e0;color:#882e60;font-size:15.5px;font-weight:bold;cursor:pointer;transition:0.2s}
+.acc-head .acc-arrow{font-size:13px;transition:transform 0.2s}
+.acc.open .acc-head{background:#e878a2;color:#fff;border-bottom-left-radius:0;border-bottom-right-radius:0}
+.acc.open .acc-head .acc-arrow{transform:rotate(180deg)}
+.acc-body{display:none;padding-top:10px}
+.acc.open .acc-body{display:block}
+
+.mini-tab-wrap{display:inline-flex;gap:6px;margin-bottom:12px;background:#ffe4f0;padding:4px;border-radius:99px}
+.mini-tab{border:none;background:transparent;color:#772658;font-size:13.5px;padding:6px 15px;border-radius:99px;cursor:pointer;font-weight:bold}
+.mini-tab.active{background:#fff;color:#b04075;box-shadow:0 1px 4px #00000012}
+
+.page{display:none}
+.page.active{display:block}
+.sub-page{display:none}
+.sub-page.active{display:block}
+
+/* ---------- 卡片 ---------- */
+.card{background:#fff9fc;border-radius:20px;padding:18px;margin-bottom:14px;box-shadow:0 2px 10px #0000000a}
+.card.health{background:#e8f8e8}
+.card.fragment{background:#fff7fb}
+.card.highlight{background:#ffeaf4}
+.item-card{padding:14px;border:1px solid #f4d7e6;border-radius:16px;margin:8px 0;background:#fff9fc}
+.head-row{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+.head-row h2{margin-bottom:0}
+.task-cmt{margin-top:10px}
+.cmt-box{margin-top:8px;border-top:1px dashed #f2c8dc;padding-top:8px}
+
+h2{margin-bottom:14px;color:#b04075;font-size:19px}
+h3{margin:16px 0 10px;color:#b04075;font-size:16px}
+.input-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+label{display:block;font-size:14px;color:#8a5f74;font-weight:bold;margin-bottom:5px}
+input,select{padding:10px;border:1px solid #f2c8dc;border-radius:12px;font-size:15px;flex:1;min-width:110px;background:#fff9fc}
+input[type=file]{padding:8px}
+input[type=range]{padding:0;border:none;background:transparent}
+textarea{padding:10px;border:1px solid #f2c8dc;border-radius:12px;font-size:15px;width:100%;background:#fff9fc;resize:vertical;min-height:80px}
+button{border:none;border-radius:12px;padding:9px 12px;cursor:pointer;font-weight:bold;font-size:14px}
+.btn-add{background:#f28fb8;color:white}
+.btn-done{background:#74b9ff;color:white}
+.btn-end{background:#55dd99;color:white}
+.btn-edit{background:#ffd066;color:#333}
+.btn-del{background:#ff7777;color:white}
+.btn-wide{width:100%;padding:13px;font-size:15px}
+.form-row{margin-bottom:12px}
+.form-row input,.form-row select,.form-row textarea{width:100%}
+#social-inspire-input{width:100%}
+.adv{border:1px dashed #f2c8dc;border-radius:14px;padding:10px 12px;background:#fff7fb;margin-bottom:12px}
+.adv summary{cursor:pointer;color:#b04075;font-weight:bold;font-size:14px;outline:none}
+.adv[open] summary{margin-bottom:10px}
+
+/* ---------- 任务 / 列表 ---------- */
+.task-item{padding:14px;border:1px solid #f4d7e6;border-radius:16px;margin:8px 0;background:#fff9fc}
+.task-item.finished{text-decoration:line-through;color:#999;background:#fcf0f6}
+.task-count{color:#d05088;font-weight:bold}
+.task-expire{color:#ff4444;font-weight:bold}
+.task-time{font-size:12.5px;color:#888;margin-top:4px}
+.task-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.apple-container{margin:14px 0;padding:14px;background:#fff9fc;border-radius:18px}
+
+/* ---------- 留言 / 灵感 ---------- */
+.comment-item{padding:12px;border-bottom:1px solid #f3d8e7;display:flex;flex-direction:column;gap:8px}
+.comment-row{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+.comment-row button{padding:6px 10px;font-size:13px;margin-left:4px}
+.comment-time{font-size:12px;color:#888}
+.tag{display:inline-block;padding:3px 8px;border-radius:99px;background:#f8c8e0;font-size:12px;margin-right:6px;color:#882e60}
+
+/* ---------- 心愿 / 复盘 ---------- */
+.stats-hint{padding:11px 14px;background:#ffeaf4;border-radius:14px;margin-bottom:12px;font-size:14.5px}
+.stats-hint b{color:#b04075}
+.filter-bar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.filter-bar select,.filter-bar input{flex:1 1 150px}
+.price-band{display:inline-block;padding:2px 9px;border-radius:8px;font-size:13px;margin:2px 4px 2px 0}
+.price-band.band-1{background:#e8f8ee;color:#2f7a58;border:1px solid #b7e6cc}
+.price-band.band-2{background:#e8f2ff;color:#2f6394;border:1px solid #bfdcf7}
+.price-band.band-3{background:#f0ebff;color:#6247a8;border:1px solid #d3c6f7}
+.price-band.band-4{background:#ffe6f0;color:#b23a6b;border:1px solid #ffc2dc}
+.item-title{font-weight:bold;color:#6b3f56}
+.item-note{margin-top:7px;font-size:13.5px;color:#8a6b7b}
+.item-note.warn{margin-top:7px;font-size:13.5px;color:#a4553f;background:#fff6ea;border:1px dashed #ffd6a8;border-radius:12px;padding:6px 10px}
+.card-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.future-bar{height:10px;background:#f7e0ec;border-radius:99px;overflow:hidden;margin:8px 0 6px}
+.future-bar i{display:block;height:100%;background:#f28fb8}
+
+/* ---------- 统计 / 图表 ---------- */
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.stat-card{background:#fff0f6;border-radius:16px;padding:12px;text-align:center}
+.stat-card .num{font-size:18px;font-weight:bold;color:#b04075}
+.stat-card .cap{font-size:12.5px;color:#8a6b7b;margin-top:2px}
+.chart-container{width:100%;height:280px}
+.chart-fallback{display:none;font-size:13px;color:#a98;padding:8px 0}
+/* 复盘按月分组标题 */
+.month-head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin:18px 0 8px;padding-bottom:6px;font-size:14.5px;font-weight:bold;color:#b04075;border-bottom:1px dashed #f2c8dc}
+.month-head:first-child{margin-top:4px}
+.month-head span{font-weight:normal;font-size:13px;color:#9a7386}
+
+/* ---------- 弹窗 ---------- */
+.modal-overlay{position:fixed;inset:0;background:rgba(120,50,85,.35);z-index:200;display:none;align-items:center;justify-content:center;padding:14px}
+.modal{background:#fff9fc;width:100%;max-width:620px;max-height:86vh;overflow:auto;border-radius:20px;padding:20px 18px;box-shadow:0 12px 34px #00000026}
+
+@media(max-width:600px){
+  body{padding:10px 10px 84px}
+  .top-tab{padding:5px 3px;font-size:11px}
+  .sub-tab{font-size:13px}
+  .card{padding:15px}
+  .stat-grid{grid-template-columns:1fr 1fr}
+}
+
+/* ============================================================
+   原生外壳适配（打包版追加；在普通浏览器里这些规则无副作用）
+   安卓 WebView 里 env(safe-area-inset-*) 恒为 0，底部 TabBar 会被
+   手势条压住，所以改成读 --bu-safe-b：由 native-bridge.js 在原生
+   环境中写入真实值，取不到就退回 env()。
+============================================================ */
+:root{
+  --bu-safe-b:env(safe-area-inset-bottom,0px);
+  --bu-safe-t:env(safe-area-inset-top,0px);
+}
+html{background:#fff0f6}
+body{
+  -webkit-tap-highlight-color:transparent;
+  overscroll-behavior-y:none;
+  padding-bottom:calc(88px + var(--bu-safe-b));
+}
+@media(max-width:600px){
+  body{padding-bottom:calc(84px + var(--bu-safe-b))}
+}
+.top-tab-wrap{padding-bottom:calc(8px + var(--bu-safe-b))}
+</style>
+</head>
+<body>
+<div id="bgMask" class="bg-mask"></div>
+<div class="wrap">
+
+  <!-- ================= 计划 ================= -->
+  <div class="page active" id="plan">
+    <!-- 考公 -->
+    <div class="acc open" id="acc-gk">
+      <button class="acc-head" data-acc="gk">📚 考公<span class="acc-arrow">▾</span></button>
+      <div class="acc-body" id="sub-gk">
+      <div class="card fragment">
+        <h2>🪶 碎片留言</h2>
+        <textarea id="gk-msg-input" placeholder="随手记下学习感悟"></textarea>
+        <button class="btn-add" id="btn-add-msg-gk" style="margin-top:10px">新增留言</button>
+        <div id="gk-msg-list"></div>
+      </div>
+      <div class="card highlight">
+        <h2>⭐ 精华留言</h2>
+        <div id="gk-top-list"></div>
+      </div>
+      </div>
+    </div>
+
+    <!-- 健康 -->
+    <div class="acc" id="acc-hl">
+      <button class="acc-head" data-acc="hl">🌿 健康<span class="acc-arrow">▾</span></button>
+      <div class="acc-body" id="sub-hl">
+      <div class="mini-tab-wrap">
+        <button class="mini-tab active" data-mini="hl-task">📋 任务</button>
+        <button class="mini-tab" data-mini="hl-msg">🪶 留言</button>
+      </div>
+      <div id="hl-task">
+        <div class="card health">
+          <h2>🌿 新增健康任务</h2>
+          <div class="input-row">
+            <input type="text" id="hl-task-name" placeholder="例如：拉伸10分钟">
+            <select id="hl-day">
+              <option value="3">3天完成</option>
+              <option value="7">7天完成</option>
+              <option value="14">14天完成</option>
+              <option value="30">30天完成</option>
+            </select>
+          </div>
+          <button class="btn-add" id="btn-add-hl">添加任务</button>
+        </div>
+        <h2>📋 任务列表</h2>
+        <div id="hl-list"></div>
+        <h2>✅ 通关任务</h2>
+        <div id="hl-finish-list"></div>
+        <div class="apple-container">🍎果园：<span id="hl-apple"></span></div>
+      </div>
+      <div id="hl-msg" style="display:none">
+        <div class="card fragment">
+          <h2>🪶 碎片留言</h2>
+          <textarea id="hl-msg-input" placeholder="记录身体感受"></textarea>
+          <button class="btn-add" id="btn-add-msg-hl" style="margin-top:10px">新增留言</button>
+          <div id="hl-msg-list"></div>
+        </div>
+        <div class="card highlight">
+          <h2>⭐ 精华留言</h2>
+          <div id="hl-top-list"></div>
+        </div>
+      </div>
+      </div>
+    </div>
+
+    <!-- 社会化 -->
+    <div class="acc" id="acc-social">
+      <button class="acc-head" data-acc="social">💫 社会化<span class="acc-arrow">▾</span></button>
+      <div class="acc-body" id="sub-social">
+      <div class="card highlight">
+        <div class="head-row">
+          <h2>⭐ 精华收藏</h2>
+          <button class="btn-edit" id="socialTopToggle">展开</button>
+        </div>
+        <div id="social-top-list"></div>
+      </div>
+      <div class="card fragment">
+        <h2>💫 瞬间&灵感</h2>
+        <input type="text" id="social-inspire-input" placeholder="一句话灵感">
+        <div class="input-row" style="margin-top:8px;">
+          <select id="social-inspire-tag">
+            <option value="🫧平静">🫧平静</option>
+            <option value="✨开心">✨开心</option>
+            <option value="🪐迷茫">🪐迷茫</option>
+            <option value="💭伤感">💭伤感</option>
+            <option value="🎉心动">🎉心动</option>
+          </select>
+          <button class="btn-add" id="btn-save-inspire">保存瞬间</button>
+        </div>
+        <div id="social-inspire-list"></div>
+      </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 心愿 ================= -->
+  <div class="page" id="wish">
+    <div class="sub-tab-wrap">
+      <button class="sub-tab active" data-wsub="cool">🐾 心愿清单</button>
+      <button class="sub-tab" data-wsub="future">🌙 未来清单</button>
+      <button class="sub-tab" data-wsub="add">➕ 新增心愿</button>
+    </div>
+
+    <div id="wish-cool">
+      <div class="stats-hint" id="wishTopStats"></div>
+      <div class="filter-bar">
+        <select id="wishCategoryFilter">
+          <option value="">全部物品分类</option>
+          <option value="beautiful">美丽美妆</option>
+          <option value="efficiency">效率工具</option>
+          <option value="comfort">居家舒适</option>
+          <option value="food">吃喝零食</option>
+          <option value="other">其他</option>
+        </select>
+        <select id="wishSortSel">
+          <option value="ct">创建时间（最新在前）</option>
+          <option value="budget-desc">价格（从高到低）</option>
+          <option value="budget-asc">价格（从低到高）</option>
+        </select>
+      </div>
+      <div id="wishListContainer"></div>
+    </div>
+
+    <div id="wish-future" style="display:none">
+      <div class="stats-hint" id="futureTopStats"></div>
+      <button class="btn-add" id="addFutureBtn">➕ 添加未来大件</button>
+      <div id="futureListContainer" style="margin-top:12px"></div>
+    </div>
+
+    <div id="wish-add" style="display:none">
+      <div class="card">
+        <h2>✨ 新增心愿</h2>
+        <div class="form-row">
+          <label>心愿名称</label>
+          <input id="wishName" placeholder="想买的东西">
+        </div>
+        <div class="form-row">
+          <label>价格（元）</label>
+          <input type="number" id="wishBudget" placeholder="0">
+        </div>
+        <details class="adv">
+          <summary>高级设置：分类｜欲望｜预判风险｜备注</summary>
+          <div class="form-row">
+            <label>物品分类</label>
+            <select id="wishCategory">
+              <option value="beautiful">美丽美妆</option>
+              <option value="efficiency">效率工具</option>
+              <option value="comfort">居家舒适</option>
+              <option value="food">吃喝零食</option>
+              <option value="other">其他</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label>欲望程度</label>
+            <select id="wishDesire">
+              <option value="low">低欲望</option>
+              <option value="mid">中等欲望</option>
+              <option value="high">强烈想要（警惕冲动）</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label>预判风险（下单后会带进购入复盘）</label>
+            <textarea id="wishDefectNote" placeholder="会不会闲置？有没有替代品？是不是一时上头？"></textarea>
+          </div>
+          <div class="form-row">
+            <label>备注（为什么想买）</label>
+            <textarea id="wishNote" placeholder="冲动还是刚需？随手记一记"></textarea>
+          </div>
+        </details>
+        <button class="btn-add btn-wide" id="addWishBtn">✅ 保存这条心愿</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 购入复盘 ================= -->
+  <div class="page" id="review">
+    <div class="stats-hint" id="purchaseFilterStats"></div>
+    <div class="filter-bar">
+      <input placeholder="搜索复盘记录（名称 / 使用感受）" id="purchaseSearch">
+      <select id="purchaseMonthSel">
+        <option value="">全部月份</option>
+      </select>
+    </div>
+    <div id="purchaseListContainer" style="margin-top:12px"></div>
+    <div class="card">
+      <h2>📈 月度花销</h2>
+      <div class="chart-container"><canvas id="spendChart"></canvas></div>
+      <div class="chart-fallback" id="spendChartFallback">图表需要联网加载，离线时不影响记录。</div>
+    </div>
+  </div>
+
+  <!-- ================= 设置 ================= -->
+  <div class="page" id="setting">
+    <div class="card">
+      <h2>📊 计划统计</h2>
+      <div class="stat-grid" id="planStatGrid"></div>
+    </div>
+    <div class="card">
+      <h2>🎀 心愿统计</h2>
+      <div class="stat-grid" id="wishStatGrid"></div>
+      <div class="chart-container" style="height:250px;margin-top:12px"><canvas id="categoryPieChart"></canvas></div>
+      <div class="chart-fallback" id="categoryPieFallback">图表需要联网加载，离线时不影响记录。</div>
+    </div>
+    <div class="card">
+      <h2>🖼 壁纸设置</h2>
+      <div class="form-row">
+        <label>自定义背景壁纸（≤5MB）</label>
+        <input type="file" accept="image/*" id="wallpaperFile">
+      </div>
+      <div class="form-row">
+        <label>背景淡化透明度：<span id="bgOpacityVal">60</span>%</label>
+        <input type="range" min="20" max="94" value="60" id="bgOpacitySlider">
+      </div>
+      <button class="btn-edit" id="resetBgBtn">恢复默认粉色背景</button>
+    </div>
+    <div class="card">
+      <h2>💾 数据导入导出</h2>
+      <button class="btn-add" id="exportAllBtn">导出全部备份</button>
+      <div class="form-row" style="margin-top:12px">
+        <label>导入备份文本</label>
+        <textarea id="importTextArea" placeholder="粘贴备份内容"></textarea>
+      </div>
+      <select id="importModeSel">
+        <option value="append">追加合并旧数据</option>
+        <option value="overwrite">覆盖清空原有全部</option>
+      </select>
+      <div style="margin-top:10px">
+        <button class="btn-add" id="importDataBtn">执行导入恢复</button>
+        <button class="btn-del" id="clearPlanBtn">清空计划数据</button>
+        <button class="btn-del" id="clearWishBtn">清空心愿数据</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ================= 底部导航 ================= -->
+<div class="top-tab-wrap">
+  <button class="top-tab active" data-page="plan"><span class="bn-ico">📚</span>计划</button>
+  <button class="top-tab" data-page="wish"><span class="bn-ico">🎀</span>心愿</button>
+  <button class="top-tab" data-page="review"><span class="bn-ico">🛒</span>复盘</button>
+  <button class="top-tab" data-page="setting"><span class="bn-ico">⚙️</span>设置</button>
+</div>
+
+<!-- ================= 弹窗 ================= -->
+<div class="modal-overlay" id="confirmModal">
+<div class="modal">
+  <h3 id="confirmTitle" style="margin-top:0"></h3>
+  <p id="confirmBody" style="margin:14px 0"></p>
+  <button class="btn-del" id="confirmOk">确认</button>
+  <button class="btn-edit" id="confirmCancel">取消</button>
+</div>
+</div>
+
+<div class="modal-overlay" id="wishEditModal">
+<div class="modal">
+  <h2>✏️ 编辑心愿</h2>
+  <input type="hidden" id="editWishId">
+  <div class="form-row">
+    <label>心愿名称</label>
+    <input id="editWishName">
+  </div>
+  <div class="form-row">
+    <label>物品分类</label>
+    <select id="editWishCategory">
+      <option value="beautiful">美丽美妆</option>
+      <option value="efficiency">效率工具</option>
+      <option value="comfort">居家舒适</option>
+      <option value="food">吃喝零食</option>
+      <option value="other">其他</option>
+    </select>
+  </div>
+  <div class="form-row">
+    <label>价格（元）</label>
+    <input type="number" id="editWishBudget">
+  </div>
+  <div class="form-row">
+    <label>欲望等级</label>
+    <select id="editWishDesire">
+      <option value="low">低欲望</option>
+      <option value="mid">中等欲望</option>
+      <option value="high">强烈想要</option>
+    </select>
+  </div>
+  <div class="form-row">
+    <label>预判风险</label>
+    <textarea id="editWishDefectNote"></textarea>
+  </div>
+  <div class="form-row">
+    <label>备注</label>
+    <textarea id="editWishNote"></textarea>
+  </div>
+  <button class="btn-add" id="saveEditWishBtn">保存修改</button>
+  <button class="btn-edit" id="closeEditWishBtn">关闭</button>
+</div>
+</div>
+
+<div class="modal-overlay" id="futureEditModal">
+<div class="modal">
+  <h2 id="futureModalTitle">添加未来大件</h2>
+  <input type="hidden" id="futureId">
+  <div class="form-row">
+    <label>大件名称</label>
+    <input id="futureName" placeholder="比如：新手机 / 相机 / 大件家具">
+  </div>
+  <div class="form-row">
+    <label>物品分类</label>
+    <select id="futureCategory">
+      <option value="beautiful">美丽美妆</option>
+      <option value="efficiency">效率工具</option>
+      <option value="comfort">居家舒适</option>
+      <option value="food">吃喝零食</option>
+      <option value="other">其他</option>
+    </select>
+  </div>
+  <div class="form-row">
+    <label>目标价格（元）</label>
+    <input type="number" id="futurePrice" placeholder="0">
+  </div>
+  <div class="form-row">
+    <label>已经攒下（元）</label>
+    <input type="number" id="futureSaved" placeholder="0">
+  </div>
+  <div class="form-row">
+    <label>计划购入时间（自由填写）</label>
+    <input id="futurePlanDate" placeholder="比如：2027 年春天 / 发年终奖之后">
+  </div>
+  <div class="form-row">
+    <label>备注</label>
+    <textarea id="futureNote" placeholder="为什么想要它？打算怎么用？"></textarea>
+  </div>
+  <button class="btn-add" id="saveFutureBtn">保存</button>
+  <button class="btn-edit" id="closeFutureModal">取消</button>
+</div>
+</div>
+
+<div class="modal-overlay" id="buyModal">
+<div class="modal">
+  <h2>🛒 标记已下单（转入购入复盘）</h2>
+  <input type="hidden" id="buySourceType">
+  <input type="hidden" id="buySourceId">
+  <div class="stats-hint">
+    要买的是：<b id="buyItemName"></b><br>
+    <span id="buyBaseHint"></span>
+  </div>
+  <div class="form-row">
+    <label>实际付款价格（不修改就按上面的价格自动转移）</label>
+    <input type="number" id="buyActualPrice" placeholder="留空＝按原价格转入复盘">
+  </div>
+  <div class="form-row">
+    <label>物品类别</label>
+    <select id="buyCategory">
+      <option value="beautiful">美丽美妆</option>
+      <option value="efficiency">效率工具</option>
+      <option value="comfort">居家舒适</option>
+      <option value="food">吃喝零食</option>
+      <option value="other">其他</option>
+    </select>
+  </div>
+  <div class="stats-hint">使用感受和复盘笔记不用现在写，之后在【购入复盘】里点编辑慢慢补充即可。</div>
+  <button class="btn-add" id="confirmBuyBtn">确认下单 · 转入复盘</button>
+  <button class="btn-edit" id="closeBuyModal">取消</button>
+</div>
+</div>
+
+<div class="modal-overlay" id="purchaseEditModal">
+<div class="modal">
+  <h2>💗 编辑购入复盘</h2>
+  <input type="hidden" id="purEditId">
+  <div class="form-row">
+    <label>物品名称</label>
+    <input id="purEditName">
+  </div>
+  <div class="form-row">
+    <label>物品类别</label>
+    <select id="purEditCategory">
+      <option value="beautiful">美丽美妆</option>
+      <option value="efficiency">效率工具</option>
+      <option value="comfort">居家舒适</option>
+      <option value="food">吃喝零食</option>
+      <option value="other">其他</option>
+    </select>
+  </div>
+  <div class="form-row">
+    <label>价格（元）</label>
+    <input type="number" id="purEditPrice">
+  </div>
+  <div class="form-row">
+    <label>使用感受标签</label>
+    <select id="purEditState">
+      <option value="">还没评价</option>
+      <option value="good">✅ 好用满意</option>
+      <option value="waste">⚠️ 踩雷后悔</option>
+      <option value="idle">🟡 闲置吃灰</option>
+    </select>
+  </div>
+  <div class="form-row">
+    <label>使用感受</label>
+    <textarea id="purEditFeel" placeholder="用起来怎么样？值不值得？下次还会买吗？"></textarea>
+  </div>
+  <button class="btn-add" id="savePurEditBtn">保存复盘</button>
+  <button class="btn-edit" id="closePurEditBtn">取消</button>
+</div>
+</div>
+
+<script>
+/* ============================================================
+   通用工具
+============================================================ */
+function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+function money(n){const v=Number(n)||0;return v.toFixed(2).replace(/\.00$/,"").replace(/(\.\d)0$/,"$1");}
+function fmtDate(iso){const d=new Date(iso);if(isNaN(d.getTime()))return"";return d.getFullYear()+"/"+(d.getMonth()+1)+"/"+d.getDate();}
+function uid(prefix){return prefix+"_"+Date.now()+"_"+Math.random().toString(16).slice(2,7);}
+function loadJSON(key,fallback){const s=localStorage.getItem(key);if(!s)return fallback;try{return JSON.parse(s);}catch(e){return fallback;}}
+function saveJSON(key,val){localStorage.setItem(key,JSON.stringify(val));}
+function $(id){return document.getElementById(id);}
+function showConfirm(title,bodyText){
+  return new Promise(resolve=>{
+    $("confirmTitle").innerText=title;
+    $("confirmBody").innerText=bodyText;
+    $("confirmModal").style.display="flex";
+    $("confirmOk").onclick=()=>{$("confirmModal").style.display="none";resolve(true);};
+    $("confirmCancel").onclick=()=>{$("confirmModal").style.display="none";resolve(false);};
+  });
+}
+
+/* ============================================================
+   一、计划模块（考公 / 健康 / 社会化）
+   数据结构与原「卜卜的计划」完全一致，老数据可直接读取
+============================================================ */
+let data;
+function normalizePlan(raw){
+  const d=raw||{};
+  if(!Array.isArray(d.gongkao)) d.gongkao=[];
+  if(!Array.isArray(d.health)) d.health=[];
+  if(!d.msg) d.msg={};
+  ["gongkao","gongkaoTop","health","healthTop","socialInspire","socialTop"].forEach(k=>{
+    if(!Array.isArray(d.msg[k])) d.msg[k]=[];
+  });
+  return d;
+}
+function savePlan(){saveJSON("taskData",data);}
+function loadPlan(){
+  data=normalizePlan(loadJSON("taskData",null));
+  savePlan();   /* 老数据补齐字段后写回，保证结构一致 */
+}
+loadPlan();
+
+const PLAN_META={
+  hl:{key:"health",todo:"hl-list",finish:"hl-finish-list",apple:"hl-apple"}
+};
+const openTaskComments={};
+function getTimeText(timestamp){
+  if(!timestamp) return "无记录";
+  const now=Date.now();
+  const diffDay=Math.floor((now-timestamp)/(1000*60*60*24));
+  if(diffDay===0) return "🟢今天";
+  else if(diffDay<=7) return `🟡${diffDay}天前`;
+  else return `🔵${diffDay}天前`;
+}
+function addPlanTask(kind){
+  const meta=PLAN_META[kind];
+  const nameInput=$(kind+"-task-name");
+  const name=nameInput.value.trim();
+  if(!name){alert("请输入任务名称");return;}
+  data[meta.key].push({id:Date.now(),name:name,days:Number($(kind+"-day").value),createTime:Date.now(),count:0,finished:false});
+  nameInput.value="";
+  savePlan();
+  renderPlanTasks(kind);
+  if(appState.page==="setting") renderPlanStat();
+}
+function renderPlanTasks(kind){
+  const meta=PLAN_META[kind];
+  const listDom=$(meta.todo), finishDom=$(meta.finish), appleDom=$(meta.apple);
+  const arr=data[meta.key];
+  const todo=arr.filter(x=>!x.finished);
+  const done=arr.filter(x=>x.finished);
+  const cmtBlock=t=>{
+    const key=kind+":"+t.id;
+    const list=t.comments||[];
+    let inner="";
+    if(openTaskComments[key]){
+      list.forEach(c=>{
+        inner+=`
+        <div class="comment-item">
+          <div class="comment-row">
+            <span>${esc(c.text)}</span>
+            <button class="btn-del" onclick="delTaskComment('${kind}',${t.id},${c.id})">删除</button>
+          </div>
+          <div class="comment-time">${getTimeText(c.time)}</div>
+        </div>`;
+      });
+      inner+=`
+      <div class="input-row" style="margin-top:8px">
+        <input id="${kind}-cmt-${t.id}" placeholder="写下这条任务的评论或记录…">
+        <button class="btn-add" onclick="addTaskComment('${kind}',${t.id})">发表</button>
+      </div>`;
+    }
+    return `
+    <div class="task-cmt">
+      <button class="btn-edit" onclick="toggleTaskComment('${kind}',${t.id})">💬 评论${list.length?"（"+list.length+"）":""}</button>
+      ${openTaskComments[key]?`<div class="cmt-box">${inner}</div>`:""}
+    </div>`;
+  };
+  listDom.innerHTML="";
+  todo.forEach(t=>{
+    listDom.innerHTML+=`
+    <div class="task-item">
+      <div>${esc(t.name)} <span class="task-count">完成次数：${t.count}</span></div>
+      <div class="task-time">发布时间：${getTimeText(t.createTime)}</div>
+      <div class="task-actions">
+        <button class="btn-done" onclick="planCount('${kind}',${t.id})">完成一次</button>
+        <button class="btn-end" onclick="planFinish('${kind}',${t.id})">✅通关</button>
+        <button class="btn-edit" onclick="planEdit('${kind}',${t.id})">编辑</button>
+        <button class="btn-del" onclick="planDel('${kind}',${t.id})">删除</button>
+      </div>
+      ${cmtBlock(t)}
+    </div>`;
+  });
+  finishDom.innerHTML="";
+  done.forEach(t=>{
+    finishDom.innerHTML+=`
+    <div class="task-item finished">
+      <div>${esc(t.name)} <span class="task-count">完成次数：${t.count}</span></div>
+      <div class="task-time">发布时间：${getTimeText(t.createTime)}</div>
+      <div class="task-actions">
+        <button class="btn-del" onclick="planDel('${kind}',${t.id})">删除</button>
+      </div>
+      ${cmtBlock(t)}
+    </div>`;
+  });
+  appleDom.innerHTML="🍎".repeat(done.length);
+}
+/* 每条任务下面的评论 */
+function toggleTaskComment(kind,id){
+  const key=kind+":"+id;
+  openTaskComments[key]=!openTaskComments[key];
+  renderPlanTasks(kind);
+}
+function addTaskComment(kind,id){
+  const inputEl=$(kind+"-cmt-"+id);
+  const val=inputEl?inputEl.value.trim():"";
+  if(!val) return;
+  const t=data[PLAN_META[kind].key].find(x=>x.id===id);
+  if(!t) return;
+  if(!Array.isArray(t.comments)) t.comments=[];
+  t.comments.push({id:Date.now(),text:val,time:Date.now()});
+  openTaskComments[kind+":"+id]=true;
+  savePlan();
+  renderPlanTasks(kind);
+}
+function delTaskComment(kind,id,cid){
+  const t=data[PLAN_META[kind].key].find(x=>x.id===id);
+  if(!t||!Array.isArray(t.comments)) return;
+  t.comments=t.comments.filter(c=>c.id!==cid);
+  savePlan();
+  renderPlanTasks(kind);
+}
+function planCount(kind,id){
+  const t=data[PLAN_META[kind].key].find(x=>x.id===id);
+  if(t&&!t.finished){t.count++;savePlan();renderPlanTasks(kind);}
+}
+function planFinish(kind,id){
+  const t=data[PLAN_META[kind].key].find(x=>x.id===id);
+  if(t){t.finished=true;savePlan();renderPlanTasks(kind);}
+}
+function planDel(kind,id){
+  data[PLAN_META[kind].key]=data[PLAN_META[kind].key].filter(x=>x.id!==id);
+  savePlan();renderPlanTasks(kind);
+}
+function planEdit(kind,id){
+  const t=data[PLAN_META[kind].key].find(x=>x.id===id);
+  const newName=prompt("修改任务名称",t.name);
+  if(newName&&newName.trim()){t.name=newName.trim();savePlan();renderPlanTasks(kind);}
+}
+
+/* 留言：gk / hl 通用 */
+const MSG_META={
+  gk:{list:"gongkao",top:"gongkaoTop",input:"gk-msg-input",listDom:"gk-msg-list",topDom:"gk-top-list"},
+  hl:{list:"health",top:"healthTop",input:"hl-msg-input",listDom:"hl-msg-list",topDom:"hl-top-list"}
+};
+function addPlanMsg(kind){
+  const meta=MSG_META[kind];
+  const input=$(meta.input);
+  const val=input.value.trim();
+  if(!val) return;
+  data.msg[meta.list].push({id:Date.now(),text:val,time:Date.now()});
+  input.value="";savePlan();renderPlanMsg(kind);
+}
+function renderPlanMsg(kind){
+  const meta=MSG_META[kind];
+  const msgList=$(meta.listDom), topList=$(meta.topDom);
+  msgList.innerHTML="";topList.innerHTML="";
+  data.msg[meta.list].forEach(m=>{
+    msgList.innerHTML+=`
+    <div class="comment-item">
+      <div class="comment-row">
+        <span>${esc(m.text)}</span>
+        <div>
+          <button class="btn-edit" onclick="planMsgToTop('${kind}',${m.id})">置顶精华</button>
+          <button class="btn-del" onclick="delPlanMsg('${kind}',false,${m.id})">删除</button>
+        </div>
+      </div>
+      <div class="comment-time">${getTimeText(m.time)}</div>
+    </div>`;
+  });
+  data.msg[meta.top].forEach(m=>{
+    topList.innerHTML+=`
+    <div class="comment-item">
+      <div class="comment-row">
+        <span>${esc(m.text)}</span>
+        <div>
+          <button class="btn-edit" onclick="planMsgToNormal('${kind}',${m.id})">取消置顶</button>
+          <button class="btn-del" onclick="delPlanMsg('${kind}',true,${m.id})">删除</button>
+        </div>
+      </div>
+      <div class="comment-time">${getTimeText(m.time)}</div>
+    </div>`;
+  });
+}
+function planMsgToTop(kind,id){
+  const meta=MSG_META[kind];
+  const item=data.msg[meta.list].find(m=>m.id===id);
+  if(!item) return;
+  data.msg[meta.list]=data.msg[meta.list].filter(m=>m.id!==id);
+  data.msg[meta.top].push(item);
+  savePlan();renderPlanMsg(kind);
+}
+function planMsgToNormal(kind,id){
+  const meta=MSG_META[kind];
+  const item=data.msg[meta.top].find(m=>m.id===id);
+  if(!item) return;
+  data.msg[meta.top]=data.msg[meta.top].filter(m=>m.id!==id);
+  data.msg[meta.list].push(item);
+  savePlan();renderPlanMsg(kind);
+}
+function delPlanMsg(kind,isTop,id){
+  const meta=MSG_META[kind];
+  const key=isTop?meta.top:meta.list;
+  data.msg[key]=data.msg[key].filter(m=>m.id!==id);
+  savePlan();renderPlanMsg(kind);
+}
+
+/* 社会化：瞬间&灵感 */
+function addInspire(){
+  const text=$("social-inspire-input").value.trim();
+  if(!text) return;
+  data.msg.socialInspire.push({id:Date.now(),text:text,tag:$("social-inspire-tag").value,time:Date.now(),type:"inspire"});
+  $("social-inspire-input").value="";
+  savePlan();renderSocial();
+}
+function renderSocial(){
+  const inspireList=$("social-inspire-list"), topList=$("social-top-list");
+  inspireList.innerHTML="";topList.innerHTML="";
+  data.msg.socialInspire.forEach(item=>{
+    inspireList.innerHTML+=`
+    <div class="comment-item">
+      <div><span class="tag">${esc(item.tag)}</span><div>${esc(item.text)}</div></div>
+      <div class="comment-row">
+        <span class="comment-time">${getTimeText(item.time)}</span>
+        <div>
+          <button class="btn-edit" onclick="inspireToTop(${item.id})">收藏精华</button>
+          <button class="btn-del" onclick="delInspire(${item.id})">删除</button>
+        </div>
+      </div>
+    </div>`;
+  });
+  data.msg.socialTop.forEach(item=>{
+    topList.innerHTML+=`
+    <div class="comment-item">
+      <div><span class="tag">${esc(item.tag)}</span><div>${esc(item.text)}</div></div>
+      <div class="comment-row">
+        <span class="comment-time">${getTimeText(item.time)}</span>
+        <div>
+          <button class="btn-edit" onclick="inspireTopBack(${item.id})">取消收藏</button>
+          <button class="btn-del" onclick="delInspireTop(${item.id})">删除</button>
+        </div>
+      </div>
+    </div>`;
+  });
+  /* 精华收藏多的时候自动收起，点按钮展开 */
+  const topCount=data.msg.socialTop.length;
+  const open=socialTopOpen===null?(topCount<=3):socialTopOpen;
+  const toggle=$("socialTopToggle");
+  topList.style.display=open?"block":"none";
+  if(toggle){
+    toggle.style.display=topCount>3?"inline-block":"none";
+    toggle.innerText=open?"收起":"展开";
+  }
+}
+let socialTopOpen=null;
+function toggleSocialTop(){
+  const topCount=data.msg.socialTop.length;
+  socialTopOpen=!(socialTopOpen===null?(topCount<=3):socialTopOpen);
+  renderSocial();
+}
+function inspireToTop(id){
+  const item=data.msg.socialInspire.find(i=>i.id===id);
+  if(!item) return;
+  data.msg.socialInspire=data.msg.socialInspire.filter(i=>i.id!==id);
+  data.msg.socialTop.push(item);
+  savePlan();renderSocial();
+}
+function inspireTopBack(id){
+  const item=data.msg.socialTop.find(i=>i.id===id);
+  if(!item) return;
+  data.msg.socialTop=data.msg.socialTop.filter(i=>i.id!==id);
+  if(item.type==="inspire") data.msg.socialInspire.push(item);
+  savePlan();renderSocial();
+}
+function delInspire(id){data.msg.socialInspire=data.msg.socialInspire.filter(i=>i.id!==id);savePlan();renderSocial();}
+function delInspireTop(id){data.msg.socialTop=data.msg.socialTop.filter(i=>i.id!==id);savePlan();renderSocial();}
+
+/* ============================================================
+   二、心愿模块（心愿清单 / 未来清单 / 购入复盘）
+   沿用原 2wish 的存储键，老数据可直接读取
+============================================================ */
+const K={wishes:"wishlist_wishes_v2",purchases:"wishlist_purchases_v2",futures:"wishlist_futures_v1",wallpaper:"wishlist_wallpaper_v2"};
+const CAT_MAP={beautiful:"美丽美妆",efficiency:"效率工具",comfort:"居家舒适",food:"吃喝零食",other:"其他"};
+const CAT_ICON={beautiful:"💄",efficiency:"⚡",comfort:"🛋️",food:"🍰",other:"🎀"};
+
+let appState={page:"plan",planSub:"gk",wishSub:"cool",wishCatFilter:"",wishSort:"ct",purchaseSearchText:"",purchaseMonth:""};
+
+function getWishes(){return loadJSON(K.wishes,[]);}
+function saveWishes(a){saveJSON(K.wishes,a);}
+function getPurchases(){return loadJSON(K.purchases,[]);}
+function savePurchases(a){saveJSON(K.purchases,a);}
+function getFutures(){return loadJSON(K.futures,[]);}
+function saveFutures(a){saveJSON(K.futures,a);}
+function wishPrice(w){return Number(w.price!=null?w.price:w.budget)||0;}
+function priceBand(v){
+  const n=Number(v)||0;
+  if(n<=30) return {cls:"band-1",label:"0-30元"};
+  if(n<=60) return {cls:"band-2",label:"30-60元"};
+  if(n<=90) return {cls:"band-3",label:"60-90元"};
+  return {cls:"band-4",label:"90元以上"};
+}
+function purchasedIds(){
+  const map={};
+  getPurchases().forEach(p=>{
+    if(p.sourceWishId) map[p.sourceWishId]=1;
+    if(p.sourceFutureId) map[p.sourceFutureId]=1;
+  });
+  return map;
+}
+/* 旧数据兼容 */
+function migrateWishData(){
+  const ws=getWishes();let wc=false;
+  ws.forEach(w=>{
+    if(w.price===undefined){w.price=Number(w.budget)||0;wc=true;}
+    if(!w.createdAt){w.createdAt=new Date().toISOString();wc=true;}
+  });
+  if(wc) saveWishes(ws);
+  const ps=getPurchases();let pc=false;
+  ps.forEach(p=>{
+    if(p.price===undefined){p.price=Number(p.actualPrice)||0;pc=true;}
+    if(p.budgetPrice===undefined){p.budgetPrice=Number(p.budget)||0;pc=true;}
+    if(p.state===undefined){p.state=p.afterState||"";pc=true;}
+    if(p.feel===undefined){p.feel=p.purchaseNote||"";pc=true;}
+    if(p.sourceWishId===undefined){p.sourceWishId="";pc=true;}
+    if(p.sourceFutureId===undefined){p.sourceFutureId="";pc=true;}
+    if(!p.createdAt){p.createdAt=new Date().toISOString();pc=true;}
+  });
+  if(pc) savePurchases(ps);
+}
+
+/* ---------- 心愿清单 ---------- */
+function renderWishListPage(){
+  renderWishList();
+  renderFutureList();
+}
+function renderWishList(){
+  const container=$("wishListContainer");
+  const bought=purchasedIds();
+  const all=getWishes();
+  let arr=all.filter(w=>!bought[w.id]);
+  if(arr.length!==all.length) saveWishes(arr);
+  if(appState.wishCatFilter) arr=arr.filter(w=>w.category===appState.wishCatFilter);
+  const sortKey=$("wishSortSel").value||appState.wishSort;
+  appState.wishSort=sortKey;
+  if(sortKey==="budget-desc") arr.sort((a,b)=>wishPrice(b)-wishPrice(a));
+  else if(sortKey==="budget-asc") arr.sort((a,b)=>wishPrice(a)-wishPrice(b));
+  else arr.sort((a,b)=>Date.parse(b.createdAt)-Date.parse(a.createdAt));
+
+  const total=arr.reduce((s,w)=>s+wishPrice(w),0);
+  $("wishTopStats").innerHTML=`🐾 心愿清单共 <b>${arr.length}</b> 条 · 合计价格 <b>${money(total)}</b> 元`;
+  let html="";
+  arr.forEach(w=>{
+    const band=priceBand(wishPrice(w));
+    html+=`
+<div class="item-card">
+  <div><span class="item-title">${CAT_ICON[w.category]||"🎀"} ${esc(w.name)}</span></div>
+  <div style="margin-top:6px">
+    <span class="price-band ${band.cls}">价格 ${money(wishPrice(w))}元（${band.label}）</span>
+    <span class="tag">${CAT_MAP[w.category]||"其他"}</span>
+    <span class="tag">${w.desire==="high"?"强烈想要":w.desire==="mid"?"中等欲望":"低欲望"}</span>
+  </div>
+  <div class="item-note">备注：${esc(w.note)||"无"}</div>
+  ${w.defectNote?`<div class="item-note warn">⚠️ 预判风险：${esc(w.defectNote)}</div>`:""}
+  <div class="card-actions">
+    <button class="btn-add buy-wish-btn" data-id="${w.id}">标记下单</button>
+    <button class="btn-edit edit-wish-btn" data-id="${w.id}">编辑</button>
+    <button class="btn-del del-wish-btn" data-id="${w.id}">删除</button>
+  </div>
+</div>`;
+  });
+  if(arr.length===0) html='<div class="card" style="text-align:center;color:#9a7386">暂无心愿记录，点【➕ 新增心愿】记一笔吧～</div>';
+  container.innerHTML=html;
+  container.querySelectorAll(".edit-wish-btn").forEach(btn=>btn.onclick=()=>openEditWish(btn.dataset.id));
+  container.querySelectorAll(".buy-wish-btn").forEach(btn=>btn.onclick=()=>openBuyModal("wish",btn.dataset.id));
+  container.querySelectorAll(".del-wish-btn").forEach(btn=>btn.onclick=async()=>{
+    const item=getWishes().find(x=>x.id===btn.dataset.id);
+    const ok=await showConfirm("删除心愿","确认删除心愿【"+(item?item.name:"")+"】？");
+    if(!ok) return;
+    saveWishes(getWishes().filter(w=>w.id!==btn.dataset.id));
+    renderWishList();
+  });
+}
+
+/* ---------- 未来清单 ---------- */
+function renderFutureList(){
+  const container=$("futureListContainer");
+  if(!container) return;
+  const arr=[...getFutures()].sort((a,b)=>(Number(b.targetPrice)||0)-(Number(a.targetPrice)||0));
+  const target=arr.reduce((s,f)=>s+(Number(f.targetPrice)||0),0);
+  const saved=arr.reduce((s,f)=>s+(Number(f.saved)||0),0);
+  $("futureTopStats").innerHTML=`🌙 未来清单共 <b>${arr.length}</b> 件大件 · 目标总额 <b>${money(target)}</b> 元 · 已攒 <b>${money(saved)}</b> 元`;
+  let html="";
+  arr.forEach(f=>{
+    const t=Number(f.targetPrice)||0,s=Number(f.saved)||0;
+    const pct=t>0?Math.min(100,Math.round(s/t*100)):0;
+    const band=priceBand(t);
+    html+=`
+<div class="item-card">
+  <div><span class="item-title">${esc(f.name)}</span></div>
+  <div style="margin-top:6px">
+    <span class="price-band ${band.cls}">目标 ${money(t)}元（${band.label}）</span>
+    <span class="tag">${CAT_MAP[f.category]||"其他"}</span>
+  </div>
+  <div class="item-note">已攒 ${money(s)} 元 ｜ 进度 ${pct}%</div>
+  <div class="future-bar"><i style="width:${pct}%"></i></div>
+  <div class="item-note">计划购入时间：${esc(f.planDate)||"未填写"}</div>
+  <div class="item-note">备注：${esc(f.note)||"无"}</div>
+  <div class="card-actions">
+    <button class="btn-add buy-future-btn" data-id="${f.id}">已购入</button>
+    <button class="btn-edit edit-future-btn" data-id="${f.id}">编辑</button>
+    <button class="btn-del del-future-btn" data-id="${f.id}">删除</button>
+  </div>
+</div>`;
+  });
+  if(arr.length===0) html='<div class="card" style="text-align:center;color:#9a7386">未来清单还空着，点上面【➕ 添加未来大件】把想攒的大件存进来～</div>';
+  container.innerHTML=html;
+  container.querySelectorAll(".edit-future-btn").forEach(btn=>btn.onclick=()=>openFutureModal(btn.dataset.id));
+  container.querySelectorAll(".buy-future-btn").forEach(btn=>btn.onclick=()=>openBuyModal("future",btn.dataset.id));
+  container.querySelectorAll(".del-future-btn").forEach(btn=>btn.onclick=async()=>{
+    const item=getFutures().find(x=>x.id===btn.dataset.id);
+    const ok=await showConfirm("删除未来大件","确认把【"+(item?item.name:"")+"】从未来清单移除吗？");
+    if(!ok) return;
+    saveFutures(getFutures().filter(x=>x.id!==btn.dataset.id));
+    renderFutureList();
+  });
+}
+
+/* ---------- 新增 / 编辑心愿 ---------- */
+function addWish(){
+  const name=$("wishName").value.trim();
+  if(!name){alert("请填写心愿名称");return;}
+  const list=getWishes();
+  list.push({
+    id:uid("wish"),
+    name:name,
+    category:$("wishCategory").value,
+    price:Number($("wishBudget").value)||0,
+    desire:$("wishDesire").value,
+    note:$("wishNote").value.trim(),
+    defectNote:$("wishDefectNote").value.trim(),
+    createdAt:new Date().toISOString()
+  });
+  saveWishes(list);
+  $("wishName").value="";$("wishBudget").value="";
+  $("wishCategory").value="other";$("wishDesire").value="low";
+  $("wishNote").value="";$("wishDefectNote").value="";
+  alert("心愿已保存！");
+  switchWishSub("cool");
+}
+function openEditWish(id){
+  const w=getWishes().find(x=>x.id===id);
+  if(!w) return;
+  $("editWishId").value=w.id;
+  $("editWishName").value=w.name;
+  $("editWishCategory").value=w.category||"other";
+  $("editWishBudget").value=wishPrice(w);
+  $("editWishDesire").value=w.desire||"low";
+  $("editWishDefectNote").value=w.defectNote||"";
+  $("editWishNote").value=w.note||"";
+  $("wishEditModal").style.display="flex";
+}
+function saveEditWish(){
+  const id=$("editWishId").value;
+  const arr=getWishes();
+  const idx=arr.findIndex(x=>x.id===id);
+  if(idx<0) return;
+  const name=$("editWishName").value.trim();
+  if(!name){alert("请填写心愿名称");return;}
+  arr[idx].name=name;
+  arr[idx].category=$("editWishCategory").value;
+  arr[idx].price=Number($("editWishBudget").value)||0;
+  arr[idx].desire=$("editWishDesire").value;
+  arr[idx].defectNote=$("editWishDefectNote").value.trim();
+  arr[idx].note=$("editWishNote").value.trim();
+  saveWishes(arr);
+  $("wishEditModal").style.display="none";
+  renderWishList();
+}
+
+/* ---------- 未来大件弹窗 ---------- */
+function openFutureModal(id){
+  const f=id?getFutures().find(x=>x.id===id):null;
+  $("futureModalTitle").innerText=f?"编辑未来大件":"添加未来大件";
+  $("futureId").value=f?f.id:"";
+  $("futureName").value=f?f.name:"";
+  $("futureCategory").value=f?(f.category||"other"):"other";
+  $("futurePrice").value=f?(f.targetPrice||""):"";
+  $("futureSaved").value=f?(f.saved||""):"";
+  $("futurePlanDate").value=f?(f.planDate||""):"";
+  $("futureNote").value=f?(f.note||""):"";
+  $("futureEditModal").style.display="flex";
+}
+function saveFuture(){
+  const id=$("futureId").value;
+  const name=$("futureName").value.trim();
+  if(!name){alert("请填写大件名称");return;}
+  const item={
+    id:id||uid("fut"),
+    name:name,
+    category:$("futureCategory").value,
+    targetPrice:Number($("futurePrice").value)||0,
+    saved:Number($("futureSaved").value)||0,
+    planDate:$("futurePlanDate").value.trim(),
+    note:$("futureNote").value.trim(),
+    createdAt:new Date().toISOString()
+  };
+  const list=getFutures();
+  if(id){
+    const idx=list.findIndex(x=>x.id===id);
+    if(idx>=0){item.createdAt=list[idx].createdAt||item.createdAt;list[idx]=item;}
+  }else{
+    list.push(item);
+  }
+  saveFutures(list);
+  $("futureEditModal").style.display="none";
+  renderFutureList();
+}
+
+/* ---------- 下单：直接转移到购入复盘 ---------- */
+function openBuyModal(sourceType,id){
+  const isWish=(sourceType==="wish");
+  const item=isWish?getWishes().find(w=>w.id===id):getFutures().find(f=>f.id===id);
+  if(!item) return;
+  const base=isWish?wishPrice(item):(Number(item.targetPrice)||0);
+  $("buySourceType").value=sourceType;
+  $("buySourceId").value=id;
+  $("buyItemName").innerText=item.name;
+  $("buyBaseHint").innerText=`原价格 ${money(base)} 元，不修改价格就直接按它自动转移。`;
+  const priceInput=$("buyActualPrice");
+  priceInput.value="";
+  priceInput.placeholder=`留空＝按 ${money(base)} 元转入复盘`;
+  $("buyCategory").value=item.category||"other";
+  $("buyModal").style.display="flex";
+}
+function confirmBuy(){
+  const sourceType=$("buySourceType").value;
+  const sourceId=$("buySourceId").value;
+  const isWish=(sourceType==="wish");
+  const item=isWish?getWishes().find(w=>w.id===sourceId):getFutures().find(f=>f.id===sourceId);
+  if(!item){alert("记录不存在，请重新打开");return;}
+  const base=isWish?wishPrice(item):(Number(item.targetPrice)||0);
+  const raw=$("buyActualPrice").value.trim();
+  let price=base;
+  if(raw!==""){
+    if(isNaN(Number(raw))){alert("价格请填写数字");return;}
+    price=Number(raw);
+  }
+  const list=getPurchases();
+  list.push({
+    id:uid("pur"),
+    sourceWishId:isWish?sourceId:"",
+    sourceFutureId:isWish?"":sourceId,
+    name:item.name,
+    category:$("buyCategory").value,
+    budgetPrice:base,
+    price:price,
+    state:"",
+    feel:"",
+    createdAt:new Date().toISOString()
+  });
+  savePurchases(list);
+  if(isWish) saveWishes(getWishes().filter(w=>w.id!==sourceId));
+  else saveFutures(getFutures().filter(f=>f.id!==sourceId));
+  $("buyModal").style.display="none";
+  alert("已生成购入复盘记录！");
+  switchPage("review");
+}
+
+/* ---------- 购入复盘 ---------- */
+function monthKeyOf(iso){
+  const d=new Date(iso);
+  if(isNaN(d.getTime())) return "";
+  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0");
+}
+function monthLabel(key){
+  const p=String(key).split("-");
+  if(p.length!==2) return "未记录时间";
+  return p[0]+"年"+Number(p[1])+"月";
+}
+function renderReviewPage(){
+  const container=$("purchaseListContainer");
+  const all=[...getPurchases()];
+
+  /* 月份下拉：只列出有记录的月份，方便按月查看 */
+  const monthSet={};
+  all.forEach(p=>{const k=monthKeyOf(p.createdAt);if(k) monthSet[k]=1;});
+  const months=Object.keys(monthSet).sort().reverse();
+  if(appState.purchaseMonth&&months.indexOf(appState.purchaseMonth)<0) appState.purchaseMonth="";
+  const sel=$("purchaseMonthSel");
+  sel.innerHTML='<option value="">全部月份</option>'+months.map(k=>`<option value="${k}">${monthLabel(k)}</option>`).join("");
+  sel.value=appState.purchaseMonth||"";
+
+  let arr=all;
+  const kw=(appState.purchaseSearchText||"").toLowerCase();
+  if(kw) arr=arr.filter(p=>p.name.toLowerCase().includes(kw)||(p.feel&&p.feel.toLowerCase().includes(kw)));
+  if(appState.purchaseMonth) arr=arr.filter(p=>monthKeyOf(p.createdAt)===appState.purchaseMonth);
+  arr.sort((a,b)=>Date.parse(b.createdAt)-Date.parse(a.createdAt));
+  const total=arr.reduce((s,p)=>s+(Number(p.price)||0),0);
+  $("purchaseFilterStats").innerHTML=`🛒 共 <b>${arr.length}</b> 条购入记录 · 合计花销 <b>${money(total)}</b> 元`
+    +(appState.purchaseMonth?`（${monthLabel(appState.purchaseMonth)}）`:"");
+
+  /* 同一年的不同月份之间分开显示 */
+  const groupStat={};
+  arr.forEach(p=>{
+    const k=monthKeyOf(p.createdAt);
+    if(!groupStat[k]) groupStat[k]={n:0,sum:0};
+    groupStat[k].n++;
+    groupStat[k].sum+=Number(p.price)||0;
+  });
+  const stateText={good:"✅ 好用满意",waste:"⚠️ 踩雷后悔",idle:"🟡 闲置吃灰"};
+  let html="",lastMonth="__none__";
+  arr.forEach(p=>{
+    const mk=monthKeyOf(p.createdAt);
+    if(mk!==lastMonth){
+      lastMonth=mk;
+      const g=groupStat[mk];
+      html+=`<div class="month-head">${monthLabel(mk)}<span>${g.n} 笔 · 合计 ${money(g.sum)} 元</span></div>`;
+    }
+    html+=`
+<div class="item-card">
+  <div><span class="item-title">${CAT_ICON[p.category]||"🎀"} ${esc(p.name)}</span></div>
+  <div style="margin-top:6px">
+    <span class="tag">${CAT_MAP[p.category]||"其他"}</span>
+    <span class="tag">${stateText[p.state]||"还没评价"}</span>
+    <span class="tag">价格 ${money(p.price)} 元</span>
+    ${Number(p.budgetPrice)>0&&Number(p.budgetPrice)!==Number(p.price)?`<span class="tag">原价格 ${money(p.budgetPrice)} 元</span>`:""}
+  </div>
+  <div class="item-note">📅 购买时间：${fmtDate(p.createdAt)}</div>
+  <div class="item-note">💗 使用感受：${esc(p.feel)||"还没写，点【编辑】补充"}</div>
+  <div class="card-actions">
+    <button class="btn-edit edit-pur-btn" data-id="${p.id}">编辑</button>
+    <button class="btn-del del-pur-btn" data-id="${p.id}">删除</button>
+  </div>
+</div>`;
+  });
+  if(arr.length===0){
+    html=(kw||appState.purchaseMonth)
+      ? '<div class="card" style="text-align:center;color:#9a7386">没有符合条件的记录，换个关键词或月份试试～</div>'
+      : '<div class="card" style="text-align:center;color:#9a7386">还没有购入记录，心愿下单后会自动转移到这里～</div>';
+  }
+  container.innerHTML=html;
+  container.querySelectorAll(".edit-pur-btn").forEach(btn=>btn.onclick=()=>openPurchaseEdit(btn.dataset.id));
+  container.querySelectorAll(".del-pur-btn").forEach(btn=>btn.onclick=async()=>{
+    const item=getPurchases().find(x=>x.id===btn.dataset.id);
+    const ok=await showConfirm("删除复盘记录","确认删除【"+(item?item.name:"")+"】的复盘记录吗？删除后不可恢复。");
+    if(!ok) return;
+    savePurchases(getPurchases().filter(p=>p.id!==btn.dataset.id));
+    renderReviewPage();
+  });
+  drawSpendChart(arr);
+}
+function openPurchaseEdit(id){
+  const p=getPurchases().find(x=>x.id===id);
+  if(!p) return;
+  $("purEditId").value=p.id;
+  $("purEditName").value=p.name;
+  $("purEditCategory").value=p.category||"other";
+  $("purEditPrice").value=Number(p.price)||0;
+  $("purEditState").value=p.state||"";
+  $("purEditFeel").value=p.feel||"";
+  $("purchaseEditModal").style.display="flex";
+}
+function savePurchaseEdit(){
+  const id=$("purEditId").value;
+  const arr=getPurchases();
+  const idx=arr.findIndex(x=>x.id===id);
+  if(idx<0) return;
+  const name=$("purEditName").value.trim();
+  if(!name){alert("请填写物品名称");return;}
+  arr[idx].name=name;
+  arr[idx].category=$("purEditCategory").value;
+  arr[idx].price=Number($("purEditPrice").value)||0;
+  arr[idx].state=$("purEditState").value;
+  arr[idx].feel=$("purEditFeel").value.trim();
+  savePurchases(arr);
+  $("purchaseEditModal").style.display="none";
+  renderReviewPage();
+}
+
+/* ---------- 图表 ---------- */
+function chartReady(canvasId,fallbackId){
+  const canvas=$(canvasId), fb=$(fallbackId);
+  if(typeof Chart!=="undefined"){canvas.style.display="";if(fb) fb.style.display="none";return true;}
+  canvas.style.display="none";if(fb) fb.style.display="block";
+  return false;
+}
+let spendChart=null,pieChart=null;
+function drawSpendChart(purData){
+  const canvas=$("spendChart");
+  if(!canvas||!chartReady("spendChart","spendChartFallback")) return;
+  if(spendChart){spendChart.destroy();spendChart=null;}
+  const monthMap={};
+  purData.forEach(item=>{
+    const d=new Date(item.createdAt);
+    if(isNaN(d.getTime())) return;
+    const key=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}`;
+    monthMap[key]=(monthMap[key]||0)+(Number(item.price)||0);
+  });
+  const keys=Object.keys(monthMap).sort();
+  spendChart=new Chart(canvas,{
+    type:"bar",
+    data:{labels:keys,datasets:[{label:"月度花销(元)",data:keys.map(k=>monthMap[k]),backgroundColor:"#f28fb8",borderRadius:10}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}}
+  });
+}
+function drawCategoryPie(purData){
+  const canvas=$("categoryPieChart");
+  if(!canvas||!chartReady("categoryPieChart","categoryPieFallback")) return;
+  if(pieChart){pieChart.destroy();pieChart=null;}
+  const group={};
+  purData.forEach(p=>{
+    const k=p.category||"other";
+    group[k]=(group[k]||0)+(Number(p.price)||0);
+  });
+  const labels=[],dataArr=[];
+  Object.keys(group).forEach(k=>{labels.push(CAT_MAP[k]||"其他");dataArr.push(group[k]);});
+  if(!labels.length){labels.push("暂无数据");dataArr.push(1);}
+  pieChart=new Chart(canvas,{
+    type:"pie",
+    data:{labels:labels,datasets:[{data:dataArr,backgroundColor:["#f28fb8","#f8c8e0","#d9c6f7","#bcdcff","#b7e6cc"]}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{title:{display:true,text:"各分类已购入花销占比"},legend:{position:"bottom"}}}
+  });
+}
+
+/* ============================================================
+   三、设置：统计 / 壁纸 / 导入导出
+============================================================ */
+function renderPlanStat(){
+  const hlTodo=data.health.filter(t=>!t.finished).length;
+  const hlDone=data.health.filter(t=>t.finished).length;
+  const gkMsg=data.msg.gongkao.length+data.msg.gongkaoTop.length;
+  const hlMsg=data.msg.health.length+data.msg.healthTop.length;
+  $("planStatGrid").innerHTML=`
+<div class="stat-card"><div class="num">${gkMsg}</div><div class="cap">考公留言</div></div>
+<div class="stat-card"><div class="num">${data.msg.gongkaoTop.length}</div><div class="cap">考公精华留言</div></div>
+<div class="stat-card"><div class="num">${hlTodo}</div><div class="cap">健康进行中</div></div>
+<div class="stat-card"><div class="num">${hlDone}</div><div class="cap">健康已通关</div></div>
+<div class="stat-card"><div class="num">${hlDone}</div><div class="cap">🍎 果园总数</div></div>
+<div class="stat-card"><div class="num">${hlMsg}</div><div class="cap">健康留言</div></div>
+<div class="stat-card"><div class="num">${data.msg.socialInspire.length}</div><div class="cap">瞬间&灵感</div></div>
+<div class="stat-card"><div class="num">${data.msg.socialTop.length}</div><div class="cap">精华收藏</div></div>`;
+}
+function renderWishStat(){
+  const wishes=getWishes(),purchases=getPurchases(),futures=getFutures();
+  const spend=purchases.reduce((s,p)=>s+(Number(p.price)||0),0);
+  const futTarget=futures.reduce((s,f)=>s+(Number(f.targetPrice)||0),0);
+  const futSaved=futures.reduce((s,f)=>s+(Number(f.saved)||0),0);
+  const good=purchases.filter(p=>p.state==="good").length;
+  const waste=purchases.filter(p=>p.state==="waste").length;
+  const idle=purchases.filter(p=>p.state==="idle").length;
+  const avg=purchases.length?spend/purchases.length:0;
+  $("wishStatGrid").innerHTML=`
+<div class="stat-card"><div class="num">${wishes.length}</div><div class="cap">心愿清单待买</div></div>
+<div class="stat-card"><div class="num">${futures.length}</div><div class="cap">未来清单大件</div></div>
+<div class="stat-card"><div class="num">${money(futTarget)}</div><div class="cap">未来大件目标总额</div></div>
+<div class="stat-card"><div class="num">${money(futSaved)}</div><div class="cap">已为大件攒下</div></div>
+<div class="stat-card"><div class="num">${purchases.length}</div><div class="cap">已购入笔数</div></div>
+<div class="stat-card"><div class="num">${money(spend)}</div><div class="cap">累计花销</div></div>
+<div class="stat-card"><div class="num">${money(avg)}</div><div class="cap">平均每单价格</div></div>
+<div class="stat-card"><div class="num">${good}/${waste}/${idle}</div><div class="cap">满意/踩雷/闲置</div></div>`;
+  drawCategoryPie(purchases);
+}
+function renderSetting(){
+  renderPlanStat();
+  renderWishStat();
+}
+
+/* 壁纸 */
+let wallpaperCfg=loadJSON(K.wallpaper,null)||{bgDataUrl:"",maskOpacity:60};
+function applyWallpaper(){
+  const mask=$("bgMask");
+  if(wallpaperCfg.bgDataUrl){
+    document.body.classList.add("custom-bg");
+    document.body.style.backgroundImage=`url(${wallpaperCfg.bgDataUrl})`;
+    mask.style.backgroundColor=`rgba(255,255,255,${wallpaperCfg.maskOpacity/100})`;
+  }else{
+    document.body.classList.remove("custom-bg");
+    document.body.style.backgroundImage="";
+    mask.style.backgroundColor="rgba(255,255,255,0.6)";
+  }
+  const slider=$("bgOpacitySlider");
+  if(slider) slider.value=wallpaperCfg.maskOpacity;
+  $("bgOpacityVal").innerText=String(wallpaperCfg.maskOpacity);
+}
+
+/* 导入导出 */
+function exportAll(){
+  const out={app:"卜卜迷你工作台",version:2,taskData:data,wishes:getWishes(),futures:getFutures(),purchases:getPurchases(),wallpaper:wallpaperCfg};
+  const blob=new Blob([JSON.stringify(out,null,2)],{type:"text/plain"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download="卜卜迷你工作台备份.txt";
+  a.click();
+}
+function importAll(){
+  const text=$("importTextArea").value.trim();
+  if(!text){alert("请先粘贴备份内容");return;}
+  let d;
+  try{d=JSON.parse(text);}catch(e){alert("备份解析失败，请检查内容");return;}
+  const mode=$("importModeSel").value;
+  const incomingPlan=d.taskData||null;
+  const hasPlan=incomingPlan||d.gongkao||d.health;
+  const hasWish=d.wishes||d.purchases||d.futures;
+  if(!hasPlan&&!hasWish){alert("没有识别到可导入的数据");return;}
+
+  if(hasPlan){
+    const src=incomingPlan||d;
+    if(mode==="overwrite"){
+      data=src;
+    }else{
+      ["gongkao","health"].forEach(k=>{
+        (src[k]||[]).forEach(t=>{if(!data[k].some(x=>x.id===t.id)) data[k].push(t);});
+      });
+      const sm=src.msg||{};
+      ["gongkao","gongkaoTop","health","healthTop","socialInspire","socialTop"].forEach(k=>{
+        (sm[k]||[]).forEach(m=>{if(!data.msg[k].some(x=>x.id===m.id)) data.msg[k].push(m);});
+      });
+    }
+    if(!Array.isArray(data.gongkao)) data.gongkao=[];
+    if(!Array.isArray(data.health)) data.health=[];
+    if(!data.msg) data.msg={};
+    ["gongkao","gongkaoTop","health","healthTop","socialInspire","socialTop"].forEach(k=>{
+      if(!Array.isArray(data.msg[k])) data.msg[k]=[];
+    });
+    savePlan();
+  }
+  if(hasWish){
+    if(mode==="overwrite"){
+      saveWishes(d.wishes||[]);
+      saveFutures(d.futures||[]);
+      savePurchases(d.purchases||[]);
+      if(d.wallpaper){wallpaperCfg=d.wallpaper;saveJSON(K.wallpaper,wallpaperCfg);}
+    }else{
+      const w=getWishes(),f=getFutures(),p=getPurchases();
+      (d.wishes||[]).forEach(x=>{if(!w.some(i=>i.id===x.id)) w.push(x);});
+      (d.futures||[]).forEach(x=>{if(!f.some(i=>i.id===x.id)) f.push(x);});
+      (d.purchases||[]).forEach(x=>{if(!p.some(i=>i.id===x.id)) p.push(x);});
+      saveWishes(w);saveFutures(f);savePurchases(p);
+    }
+    migrateWishData();
+  }
+  applyWallpaper();
+  renderAll();
+  alert("导入完成");
+}
+
+/* ============================================================
+   四、页面切换
+============================================================ */
+function switchPage(pageId){
+  appState.page=pageId;
+  document.querySelectorAll(".top-tab").forEach(b=>b.classList.toggle("active",b.dataset.page===pageId));
+  document.querySelectorAll(".page").forEach(p=>p.classList.toggle("active",p.id===pageId));
+  refreshPage(pageId);
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+function refreshPage(pageId){
+  if(pageId==="plan"){renderPlanTasks("hl");renderPlanMsg("gk");renderPlanMsg("hl");renderSocial();}
+  else if(pageId==="wish"){renderWishListPage();}
+  else if(pageId==="review"){renderReviewPage();}
+  else if(pageId==="setting"){renderSetting();}
+}
+function switchPlanSub(sub){
+  appState.planSub=sub;
+  document.querySelectorAll(".sub-tab[data-sub]").forEach(b=>b.classList.toggle("active",b.dataset.sub===sub));
+  document.querySelectorAll(".sub-page").forEach(p=>p.classList.toggle("active",p.id==="sub-"+sub));
+}
+function switchPlanMini(kind,mini){
+  const isTask=mini.endsWith("-task");
+  $(kind+"-task").style.display=isTask?"block":"none";
+  $(kind+"-msg").style.display=isTask?"none":"block";
+  document.querySelectorAll(".mini-tab[data-mini]").forEach(b=>{
+    if(b.dataset.mini.indexOf(kind+"-")===0) b.classList.toggle("active",b.dataset.mini===mini);
+  });
+}
+function switchWishSub(sub){
+  appState.wishSub=sub;
+  document.querySelectorAll(".sub-tab[data-wsub]").forEach(b=>b.classList.toggle("active",b.dataset.wsub===sub));
+  $("wish-cool").style.display=(sub==="cool")?"block":"none";
+  $("wish-future").style.display=(sub==="future")?"block":"none";
+  $("wish-add").style.display=(sub==="add")?"block":"none";
+  if(sub==="cool") renderWishList();
+  if(sub==="future") renderFutureList();
+}
+function renderAll(){
+  renderPlanTasks("hl");
+  renderPlanMsg("gk");renderPlanMsg("hl");renderSocial();
+  renderWishList();renderFutureList();
+}
+
+/* 折叠式板块：一次只展开一个 */
+let openAcc="gk";
+function toggleAcc(kind){
+  openAcc=(openAcc===kind)?"":kind;
+  renderAcc();
+}
+function renderAcc(){
+  document.querySelectorAll(".acc").forEach(a=>a.classList.toggle("open",a.id==="acc-"+openAcc));
+}
+
+/* ============================================================
+   五、初始化 & 事件绑定
+============================================================ */
+function bindEvents(){
+  document.querySelectorAll(".top-tab").forEach(b=>b.onclick=()=>switchPage(b.dataset.page));
+  document.querySelectorAll(".sub-tab[data-sub]").forEach(b=>b.onclick=()=>switchPlanSub(b.dataset.sub));
+  document.querySelectorAll(".mini-tab[data-mini]").forEach(b=>b.onclick=()=>{
+    const parts=b.dataset.mini.split("-");
+    switchPlanMini(parts[0],b.dataset.mini);
+  });
+  document.querySelectorAll(".sub-tab[data-wsub]").forEach(b=>b.onclick=()=>switchWishSub(b.dataset.wsub));
+  document.querySelectorAll(".acc-head").forEach(b=>b.onclick=()=>toggleAcc(b.dataset.acc));
+
+  $("btn-add-hl").onclick=()=>addPlanTask("hl");
+  $("btn-add-msg-gk").onclick=()=>addPlanMsg("gk");
+  $("btn-add-msg-hl").onclick=()=>addPlanMsg("hl");
+  $("btn-save-inspire").onclick=addInspire;
+  $("socialTopToggle").onclick=toggleSocialTop;
+
+  $("addWishBtn").onclick=addWish;
+  $("saveEditWishBtn").onclick=saveEditWish;
+  $("closeEditWishBtn").onclick=()=>$("wishEditModal").style.display="none";
+  $("addFutureBtn").onclick=()=>openFutureModal(null);
+  $("saveFutureBtn").onclick=saveFuture;
+  $("closeFutureModal").onclick=()=>$("futureEditModal").style.display="none";
+  $("confirmBuyBtn").onclick=confirmBuy;
+  $("closeBuyModal").onclick=()=>$("buyModal").style.display="none";
+  $("savePurEditBtn").onclick=savePurchaseEdit;
+  $("closePurEditBtn").onclick=()=>$("purchaseEditModal").style.display="none";
+
+  $("wishCategoryFilter").onchange=e=>{appState.wishCatFilter=e.target.value;renderWishList();};
+  $("wishSortSel").onchange=e=>{appState.wishSort=e.target.value;renderWishList();};
+  $("purchaseSearch").oninput=e=>{appState.purchaseSearchText=e.target.value.trim();renderReviewPage();};
+  $("purchaseMonthSel").onchange=e=>{appState.purchaseMonth=e.target.value;renderReviewPage();};
+
+  $("wallpaperFile").onchange=e=>{
+    const file=e.target.files[0];
+    if(!file) return;
+    if(file.size>5*1024*1024){alert("图片不能大于5MB");return;}
+    const reader=new FileReader();
+    reader.onload=ev=>{wallpaperCfg.bgDataUrl=ev.target.result;saveJSON(K.wallpaper,wallpaperCfg);applyWallpaper();};
+    reader.readAsDataURL(file);
+  };
+  $("bgOpacitySlider").oninput=e=>{wallpaperCfg.maskOpacity=Number(e.target.value);saveJSON(K.wallpaper,wallpaperCfg);applyWallpaper();};
+  $("resetBgBtn").onclick=()=>{wallpaperCfg.bgDataUrl="";saveJSON(K.wallpaper,wallpaperCfg);applyWallpaper();};
+
+  $("exportAllBtn").onclick=exportAll;
+  $("importDataBtn").onclick=importAll;
+  $("clearPlanBtn").onclick=async()=>{
+    const ok=await showConfirm("清空计划数据","确定清空考公、健康、社会化的全部任务和留言吗？此操作不可恢复。");
+    if(!ok) return;
+    data={gongkao:[],health:[],msg:{gongkao:[],gongkaoTop:[],health:[],healthTop:[],socialInspire:[],socialTop:[]}};
+    savePlan();renderAll();alert("计划数据已清空");
+  };
+  $("clearWishBtn").onclick=async()=>{
+    const ok=await showConfirm("清空心愿数据","确定清空心愿、未来清单、购入复盘和壁纸吗？此操作不可恢复。");
+    if(!ok) return;
+    localStorage.removeItem(K.wishes);
+    localStorage.removeItem(K.futures);
+    localStorage.removeItem(K.purchases);
+    localStorage.removeItem(K.wallpaper);
+    wallpaperCfg={bgDataUrl:"",maskOpacity:60};
+    applyWallpaper();renderAll();alert("心愿数据已清空");
+  };
+  // 点击弹窗遮罩关闭
+  document.querySelectorAll(".modal-overlay").forEach(ov=>{
+    ov.onclick=e=>{if(e.target===ov) ov.style.display="none";};
+  });
+}
+function init(){
+  loadPlan();
+  migrateWishData();
+  applyWallpaper();
+  bindEvents();
+  renderAll();
+  renderAcc();
+  switchPlanMini("hl","hl-task");
+  switchWishSub("cool");
+  switchPage("plan");
+}
+if(document.readyState==="loading"){
+  window.addEventListener("DOMContentLoaded",init);
+}else{
+  init();
+}
+</script>
+</body>
+</html>

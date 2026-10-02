@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">卜卜工作台</string>
+    <string name="title_activity_main">卜卜工作台</string>
+    <string name="package_name">com.bubu.workbench</string>
+    <string name="custom_url_scheme">com.bubu.workbench</string>
+</resources>

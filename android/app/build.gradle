@@ -1,0 +1,114 @@
+apply plugin: 'com.android.application'
+
+// ------------------------------------------------------------
+// 发布签名
+//
+// 口令放在 android/keystore.properties（已被 .gitignore 排除）。
+// 文件不存在时整段自动跳过 —— 这样别人 clone 下来、或者只跑 debug 构建时，
+// 不会因为缺签名文件而失败。
+// ------------------------------------------------------------
+def keystorePropsFile = rootProject.file('keystore.properties')
+def keystoreProps = new Properties()
+if (keystorePropsFile.exists()) {
+    keystorePropsFile.withInputStream { keystoreProps.load(it) }
+}
+
+// ------------------------------------------------------------
+// 版本号：以工程根目录 package.json 的 version 为唯一来源
+//
+// 以后升级版本只改 package.json 一处，这里自动换算：
+//   versionName = package.json 的 version，原样用（如 "1.2.3"）
+//   versionCode = major*10000 + minor*100 + patch     （1.2.3 → 10203）
+//
+// versionCode 必须是单调递增的整数，Google Play 靠它判断新旧，
+// 所以这个换算规则要一直保持不变，否则会算出一个更小的值。
+//
+// 带后缀的版本（如 "1.2.3-beta1"）会先按 '-' 切掉后缀再算。
+// 读不到 package.json 时退回 1.0.0 / 1，保证构建不会因此中断。
+// ------------------------------------------------------------
+def appVersionName = '1.0.0'
+def appVersionCode = 1
+try {
+    def pkgFile = rootProject.file('../package.json')
+    if (pkgFile.exists()) {
+        def pkg = new groovy.json.JsonSlurper().parseText(pkgFile.text)
+        appVersionName = (pkg.version ?: '1.0.0').toString()
+        def nums = (appVersionName.tokenize('-')[0].tokenize('.') + ['0', '0', '0'])
+                .collect { it.isInteger() ? it.toInteger() : 0 }
+        appVersionCode = nums[0] * 10000 + nums[1] * 100 + nums[2]
+    }
+} catch (ignored) {
+    logger.warn('[version] 读取 package.json 失败，回退到 1.0.0 / 1')
+}
+logger.lifecycle("[version] ${appVersionName} (versionCode ${appVersionCode})")
+
+android {
+    namespace "com.bubu.workbench"
+    compileSdk rootProject.ext.compileSdkVersion
+    // 国内镜像上只找得到 build-tools 34.0.0（35 的包 dl.google.com 下不动），
+    // 这里显式指定，避免 AGP 去找默认的 35.0.0 而报 "Failed to find Build Tools"
+    buildToolsVersion "34.0.0"
+
+    signingConfigs {
+        release {
+            if (keystorePropsFile.exists()) {
+                storeFile file(keystoreProps['storeFile'])
+                storePassword keystoreProps['storePassword']
+                keyAlias keystoreProps['keyAlias']
+                keyPassword keystoreProps['keyPassword']
+            }
+        }
+    }
+
+    defaultConfig {
+        applicationId "com.bubu.workbench"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode appVersionCode
+        versionName appVersionName
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (keystorePropsFile.exists()) {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+}
+
+apply from: 'capacitor.build.gradle'
+
+try {
+    def servicesJSON = file('google-services.json')
+    if (servicesJSON.text) {
+        apply plugin: 'com.google.gms.google-services'
+    }
+} catch(Exception e) {
+    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}
