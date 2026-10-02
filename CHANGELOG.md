@@ -45,6 +45,14 @@
   导入时会提示「可能是旧版本导出的」，不影响导入）
 - 导入完成的提示现在会列出各模块的条数和本次实际增加的数量
 
+### 一键编译并安装
+
+- 新增 `一键编译并安装.bat`（桌面也有副本）：双击就依次跑完
+  `npm run build:release` + `npm run install:release`，失败时给出中文提示并停住不闪退
+- 逻辑放在 `tools/build-and-install.ps1` 里，`.bat` 保持纯 ASCII 只做入口 ——
+  cmd.exe 读批处理用的是控制台代码页（这台机器上 UTF-8 / GBK 不一致），
+  中文写在 `.bat` 里会导致整行解析错乱
+
 ### 变更
 
 - 应用图标与启动图换成仓鼠图。源图放在 `assets/icon-source.jpg`，
