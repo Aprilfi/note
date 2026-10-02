@@ -38,7 +38,7 @@ body.custom-bg{background-image:none;background-size:cover;background-position:c
 .top-tab.active{background:#f8c8e0;color:#882e60;box-shadow:none}
 .top-tab .bn-ico{font-size:17px;line-height:1}
 
-/* 折叠式板块（考公 / 健康 / 社会化），去掉二级导航 */
+/* 折叠式板块（健康 / 社会化），去掉二级导航。考公板块已下线 */
 .acc{margin-bottom:12px}
 .acc-head{width:100%;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:11px 14px;border:none;border-radius:16px;background:#f8c8e0;color:#882e60;font-size:15.5px;font-weight:bold;cursor:pointer;transition:0.2s}
 .acc-head .acc-arrow{font-size:13px;transition:transform 0.2s}
@@ -174,25 +174,8 @@ body{
 
   <!-- ================= 计划 ================= -->
   <div class="page active" id="plan">
-    <!-- 考公 -->
-    <div class="acc open" id="acc-gk">
-      <button class="acc-head" data-acc="gk">📚 考公<span class="acc-arrow">▾</span></button>
-      <div class="acc-body" id="sub-gk">
-      <div class="card fragment">
-        <h2>🪶 碎片留言</h2>
-        <textarea id="gk-msg-input" placeholder="随手记下学习感悟"></textarea>
-        <button class="btn-add" id="btn-add-msg-gk" style="margin-top:10px">新增留言</button>
-        <div id="gk-msg-list"></div>
-      </div>
-      <div class="card highlight">
-        <h2>⭐ 精华留言</h2>
-        <div id="gk-top-list"></div>
-      </div>
-      </div>
-    </div>
-
     <!-- 健康 -->
-    <div class="acc" id="acc-hl">
+    <div class="acc open" id="acc-hl">
       <button class="acc-head" data-acc="hl">🌿 健康<span class="acc-arrow">▾</span></button>
       <div class="acc-body" id="sub-hl">
       <div class="mini-tab-wrap">
@@ -259,6 +242,18 @@ body{
           <button class="btn-add" id="btn-save-inspire">保存瞬间</button>
         </div>
         <div id="social-inspire-list"></div>
+      </div>
+
+      <!-- 独立于"瞬间&灵感"的一套评论，和健康那边同款 -->
+      <div class="card fragment">
+        <h2>🪶 碎片留言</h2>
+        <textarea id="social-cmt-input" placeholder="随手记一句"></textarea>
+        <button class="btn-add" id="btn-add-msg-social" style="margin-top:10px">新增留言</button>
+        <div id="social-cmt-list"></div>
+      </div>
+      <div class="card highlight">
+        <h2>⭐ 精华留言</h2>
+        <div id="social-cmt-top-list"></div>
       </div>
       </div>
     </div>
@@ -557,16 +552,15 @@ function showConfirm(title,bodyText){
 }
 
 /* ============================================================
-   一、计划模块（考公 / 健康 / 社会化）
+   一、计划模块（健康 / 社会化）。考公板块已下线，旧数据保留但不再渲染
    数据结构与原「卜卜的计划」完全一致，老数据可直接读取
 ============================================================ */
 let data;
 function normalizePlan(raw){
   const d=raw||{};
-  if(!Array.isArray(d.gongkao)) d.gongkao=[];
   if(!Array.isArray(d.health)) d.health=[];
   if(!d.msg) d.msg={};
-  ["gongkao","gongkaoTop","health","healthTop","socialInspire","socialTop"].forEach(k=>{
+  ["health","healthTop","socialMsg","socialMsgTop","socialInspire","socialTop"].forEach(k=>{
     if(!Array.isArray(d.msg[k])) d.msg[k]=[];
   });
   return d;
@@ -706,10 +700,10 @@ function planEdit(kind,id){
   if(newName&&newName.trim()){t.name=newName.trim();savePlan();renderPlanTasks(kind);}
 }
 
-/* 留言：gk / hl 通用 */
+/* 留言：健康 / 社会化 通用（考公已下线） */
 const MSG_META={
-  gk:{list:"gongkao",top:"gongkaoTop",input:"gk-msg-input",listDom:"gk-msg-list",topDom:"gk-top-list"},
-  hl:{list:"health",top:"healthTop",input:"hl-msg-input",listDom:"hl-msg-list",topDom:"hl-top-list"}
+  hl:{list:"health",top:"healthTop",input:"hl-msg-input",listDom:"hl-msg-list",topDom:"hl-top-list"},
+  social:{list:"socialMsg",top:"socialMsgTop",input:"social-cmt-input",listDom:"social-cmt-list",topDom:"social-cmt-top-list"}
 };
 function addPlanMsg(kind){
   const meta=MSG_META[kind];
@@ -1296,15 +1290,15 @@ function drawCategoryPie(purData){
 function renderPlanStat(){
   const hlTodo=data.health.filter(t=>!t.finished).length;
   const hlDone=data.health.filter(t=>t.finished).length;
-  const gkMsg=data.msg.gongkao.length+data.msg.gongkaoTop.length;
   const hlMsg=data.msg.health.length+data.msg.healthTop.length;
+  const scMsg=data.msg.socialMsg.length+data.msg.socialMsgTop.length;
   $("planStatGrid").innerHTML=`
-<div class="stat-card"><div class="num">${gkMsg}</div><div class="cap">考公留言</div></div>
-<div class="stat-card"><div class="num">${data.msg.gongkaoTop.length}</div><div class="cap">考公精华留言</div></div>
 <div class="stat-card"><div class="num">${hlTodo}</div><div class="cap">健康进行中</div></div>
 <div class="stat-card"><div class="num">${hlDone}</div><div class="cap">健康已通关</div></div>
 <div class="stat-card"><div class="num">${hlDone}</div><div class="cap">🍎 果园总数</div></div>
 <div class="stat-card"><div class="num">${hlMsg}</div><div class="cap">健康留言</div></div>
+<div class="stat-card"><div class="num">${scMsg}</div><div class="cap">社会化留言</div></div>
+<div class="stat-card"><div class="num">${data.msg.socialMsgTop.length}</div><div class="cap">社会化精华留言</div></div>
 <div class="stat-card"><div class="num">${data.msg.socialInspire.length}</div><div class="cap">瞬间&灵感</div></div>
 <div class="stat-card"><div class="num">${data.msg.socialTop.length}</div><div class="cap">精华收藏</div></div>`;
 }
@@ -1376,13 +1370,13 @@ function importAll(){
   try{d=JSON.parse(text);}catch(e){alert("备份解析失败。请确认内容是本应用「导出全部备份」得到的那份文件。");return;}
   const mode=$("importModeSel").value;
   const incomingPlan=d.taskData||null;
-  const hasPlan=!!incomingPlan||!!d.gongkao||!!d.health;
+  const hasPlan=!!incomingPlan||!!d.health;
   const hasWish=Array.isArray(d.wishes)||Array.isArray(d.purchases)||Array.isArray(d.futures);
   if(!hasPlan&&!hasWish){alert("没有在备份里识别到可导入的数据。");return;}
 
   /* 记下导入前的数量，结束后告诉用户实际增加了多少 */
   const cnt=()=>({
-    gk:(data.gongkao||[]).length, hl:(data.health||[]).length,
+    hl:(data.health||[]).length,
     w:getWishes().length, f:getFutures().length, p:getPurchases().length
   });
   const before=cnt();
@@ -1392,18 +1386,17 @@ function importAll(){
     if(mode==="overwrite"){
       data=src;
     }else{
-      ["gongkao","health"].forEach(k=>{
+      ["health"].forEach(k=>{
         (src[k]||[]).forEach(t=>{if(!data[k].some(x=>x.id===t.id)) data[k].push(t);});
       });
       const sm=src.msg||{};
-      ["gongkao","gongkaoTop","health","healthTop","socialInspire","socialTop"].forEach(k=>{
+      ["health","healthTop","socialMsg","socialMsgTop","socialInspire","socialTop"].forEach(k=>{
         (sm[k]||[]).forEach(m=>{if(!data.msg[k].some(x=>x.id===m.id)) data.msg[k].push(m);});
       });
     }
-    if(!Array.isArray(data.gongkao)) data.gongkao=[];
     if(!Array.isArray(data.health)) data.health=[];
     if(!data.msg) data.msg={};
-    ["gongkao","gongkaoTop","health","healthTop","socialInspire","socialTop"].forEach(k=>{
+    ["health","healthTop","socialMsg","socialMsgTop","socialInspire","socialTop"].forEach(k=>{
       if(!Array.isArray(data.msg[k])) data.msg[k]=[];
     });
     savePlan();
@@ -1429,7 +1422,7 @@ function importAll(){
   const dlt=(a,b)=>{const n=b-a;return n>0?"+"+n:(n<0?String(n):"±0");};
   const lines=[];
   if(hasPlan){
-    lines.push("考公 "+after.gk+" 条（"+dlt(before.gk,after.gk)+"）　健康 "+after.hl+" 条（"+dlt(before.hl,after.hl)+"）");
+    lines.push("健康 "+after.hl+" 条（"+dlt(before.hl,after.hl)+"）");
   }
   if(hasWish){
     lines.push("心愿 "+after.w+" 条（"+dlt(before.w,after.w)+"）　未来清单 "+after.f+" 条（"+dlt(before.f,after.f)+"）");
@@ -1449,7 +1442,7 @@ function switchPage(pageId){
   window.scrollTo({top:0,behavior:"smooth"});
 }
 function refreshPage(pageId){
-  if(pageId==="plan"){renderPlanTasks("hl");renderPlanMsg("gk");renderPlanMsg("hl");renderSocial();}
+  if(pageId==="plan"){renderPlanTasks("hl");renderPlanMsg("hl");renderPlanMsg("social");renderSocial();}
   else if(pageId==="wish"){renderWishListPage();}
   else if(pageId==="review"){renderReviewPage();}
   else if(pageId==="setting"){renderSetting();}
@@ -1477,12 +1470,12 @@ function switchWishSub(sub){
 }
 function renderAll(){
   renderPlanTasks("hl");
-  renderPlanMsg("gk");renderPlanMsg("hl");renderSocial();
+  renderPlanMsg("hl");renderPlanMsg("social");renderSocial();
   renderWishList();renderFutureList();
 }
 
 /* 折叠式板块：一次只展开一个 */
-let openAcc="gk";
+let openAcc="hl";
 function toggleAcc(kind){
   openAcc=(openAcc===kind)?"":kind;
   renderAcc();
@@ -1505,8 +1498,8 @@ function bindEvents(){
   document.querySelectorAll(".acc-head").forEach(b=>b.onclick=()=>toggleAcc(b.dataset.acc));
 
   $("btn-add-hl").onclick=()=>addPlanTask("hl");
-  $("btn-add-msg-gk").onclick=()=>addPlanMsg("gk");
   $("btn-add-msg-hl").onclick=()=>addPlanMsg("hl");
+  $("btn-add-msg-social").onclick=()=>addPlanMsg("social");
   $("btn-save-inspire").onclick=addInspire;
   $("socialTopToggle").onclick=toggleSocialTop;
 
@@ -1565,9 +1558,9 @@ function bindEvents(){
       /* 把识别到的内容列出来，让人一眼看出选对文件没有 */
       const bits=[];
       const plan=d.taskData||d;
-      if(d.taskData||d.gongkao||d.health){
-        const gk=(plan.gongkao||[]).length, hl=(plan.health||[]).length;
-        bits.push("计划（考公 "+gk+" 条 / 健康 "+hl+" 条）");
+      if(d.taskData||d.health){
+        const hl=(plan.health||[]).length;
+        bits.push("健康计划 "+hl+" 条");
       }
       if(Array.isArray(d.wishes))    bits.push("心愿 "+d.wishes.length+" 条");
       if(Array.isArray(d.futures))   bits.push("未来清单 "+d.futures.length+" 条");
@@ -1597,9 +1590,10 @@ function bindEvents(){
   $("exportAllBtn").onclick=exportAll;
   $("importDataBtn").onclick=importAll;
   $("clearPlanBtn").onclick=async()=>{
-    const ok=await showConfirm("清空计划数据","确定清空考公、健康、社会化的全部任务和留言吗？此操作不可恢复。");
+    const ok=await showConfirm("清空计划数据","确定清空健康、社会化的全部任务和留言吗？此操作不可恢复。");
     if(!ok) return;
-    data={gongkao:[],health:[],msg:{gongkao:[],gongkaoTop:[],health:[],healthTop:[],socialInspire:[],socialTop:[]}};
+    // 注意：这里会连老数据里的考公内容一起清掉（考公板块已下线，但旧数据可能还在）
+    data={health:[],msg:{health:[],healthTop:[],socialMsg:[],socialMsgTop:[],socialInspire:[],socialTop:[]}};
     savePlan();renderAll();alert("计划数据已清空");
   };
   $("clearWishBtn").onclick=async()=>{
