@@ -454,6 +454,14 @@ Android Studio 那边的镜像配置（SDK 更新源、SDK 基础地址覆盖等
 `tools/` 下的 `.ps1` 里有中文，Windows PowerShell 5.1 默认按 GBK 读，
 存成无 BOM 的 UTF-8 会直接报语法错误。用编辑器改完注意别把编码改掉。
 
+**`.bat` 文件里不要写中文，也不要用 `chcp`。**
+cmd.exe 读批处理用的是控制台代码页，这台机器上 UTF-8 和 GBK 不一致。
+更麻烦的是在 `.bat` 里用 `chcp 65001` 换代码页：cmd 的读取偏移会错位，
+把后面的行切碎。症状很像玄学 —— 报 `'tle' is not recognized`，
+其实是 `title` 那一行被砍成了两截。
+所以本项目的 `.bat` 一律只当**纯 ASCII 入口**（`一键编译并安装.bat`、
+`启动模拟器.bat` 都是这样），中文提示全部放在对应的 `.ps1` 里。
+
 **别再去改原来的 `卜卜迷你工作台D.html`。**
 现在有两份拷贝，`www\index.html` 才是打进 APK 的那份，而且里面多了
 本地 Chart.js、`native-bridge.js`、`version.js` 的引入。
