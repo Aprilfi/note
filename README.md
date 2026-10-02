@@ -167,7 +167,8 @@ npm run install:release
 | --- | --- |
 | 返回键行为 | `window.buHandleBack()` |
 | 底部安全区 | `applyInsets()` |
-| 导出备份的落盘方式 | `routeBackup()` |
+| 导出备份的落盘方式 | `routeBackup()`（走原生 SAF 还是降级到系统分享） |
+| 「另存为」对话框本身 | `android\...\MainActivity.java` 的 `BuBridge.saveBackup()` |
 | 设置页的版本号显示 | `renderVersion()` |
 
 ### 3.3 加原生能力（通知 / 相机 / 文件 / 分享等）
@@ -331,6 +332,8 @@ apk-build/
 │  └─ icon-source.jpg          图标源图（换图标就替换这个文件）
 ├─ android/                    原生工程（Capacitor 生成，可提交进版本库）
 │  ├─ app/build.gradle           应用配置：签名、版本号换算
+│  ├─ app/src/main/java/com/bubu/workbench/MainActivity.java
+│  │                             原生桥：导出备份时弹系统「另存为」对话框
 │  ├─ app/src/main/AndroidManifest.xml   权限、Activity 声明
 │  ├─ app/src/main/res/          图标、启动图、字符串
 │  ├─ app/bubu-release.jks       ← 签名密钥库，**不在版本库里**

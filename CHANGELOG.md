@@ -45,6 +45,21 @@
   导入时会提示「可能是旧版本导出的」，不影响导入）
 - 导入完成的提示现在会列出各模块的条数和本次实际增加的数量
 
+### 导出备份改用系统「另存为」对话框
+
+- 之前导出是「写进 App 自己的 Documents 目录 + 弹系统分享面板」，用户看不到
+  文件存哪了，而且分享面板里有没有「保存到本机」取决于设备装了哪些 App
+  （裸模拟器上就没有）
+- 改成安卓标准的 SAF 另存为（`ACTION_CREATE_DOCUMENT`）：能自己挑文件夹、
+  改文件名，界面是系统自带的（`com.google.android.documentsui`），什么设备上都有
+- 实现放在 `MainActivity.java`：通过 `addJavascriptInterface` 暴露
+  `window.AndroidBu.saveBackup(文件名, 文本)`，用 `ActivityResultContracts.CreateDocument`
+  拿回用户选定的 Uri 再写入
+- 保存完成后回调用 `window.__buSaveResult(ok)` 通知网页，界面弹出明确提示
+  （「已保存：xxx.txt，在你刚才选的那个文件夹里」），取消则不打扰
+- `.documentsui` 是系统组件，不再依赖 `@capacitor/filesystem` 的私有目录 +
+  `@capacitor/share`，那套降级为拿不到原生桥时的兜底
+
 ### 一键编译并安装
 
 - 新增 `一键编译并安装.bat`（桌面也有副本）：双击就依次跑完

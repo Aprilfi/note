@@ -123,33 +123,54 @@
      这里钩住 URL.createObjectURL，把要下载的文本顺手交给原生保存。
      原来的浏览器行为保持不动（浏览器里照常弹出下载）。
   ============================================================ */
+  /* 最近一次导出的文件名，保存完成后用来提示用户 */
+  var lastBackupName = null;
+
   function routeBackup(text) {
-    // (a) Capacitor：写进 App 私有目录再调系统分享
+    // (a) 原生「另存为」对话框（SAF）
+    //
+    //     体验最好：能选文件夹、能改文件名，而且是安卓系统自带的界面，
+    //     不依赖设备上装了什么 App。实现在 MainActivity.java 里。
+    if (AB && typeof AB.saveBackup === 'function') {
+      lastBackupName = backupName();
+      nativeCall('saveBackup', lastBackupName, text);
+      return true;
+    }
+
+    // (b) 自写壳注入的保存函数
+    if (typeof window.__BU_SAVE__ === 'function') {
+      try { window.__BU_SAVE__(backupName(), text); return true; } catch (e) { log('__BU_SAVE__ failed: ' + e); }
+    }
+
+    // (c) 最后兜底：写进 App 自己的 Documents 目录，再调系统分享把文件发出去。
+    //     这条路要靠分享面板里有能接收文件的 App；裸模拟器上就没有，
+    //     所以只在拿不到原生 SAF 桥的时候才走。
     if (CAP && CAP.Filesystem && typeof CAP.Filesystem.writeFile === 'function') {
+      var name = backupName();
       CAP.Filesystem.writeFile({
-        path: backupName(),
+        path: name,
         data: text,
         directory: 'DOCUMENTS',
         encoding: 'utf8'
       }).then(function (res) {
         log('backup written: ' + (res && res.uri));
         if (CAP.Share && typeof CAP.Share.share === 'function') {
-          return CAP.Share.share({ title: backupName(), url: res.uri });
+          return CAP.Share.share({ title: name, url: res.uri });
         }
       }).catch(function (e) { log('backup failed: ' + e); });
       return true;
     }
-    // (b) 自写壳注入的保存函数
-    if (typeof window.__BU_SAVE__ === 'function') {
-      try { window.__BU_SAVE__(backupName(), text); return true; } catch (e) { log('__BU_SAVE__ failed: ' + e); }
-    }
-    // (c) Android JavascriptInterface
-    if (AB && typeof AB.saveBackup === 'function') {
-      nativeCall('saveBackup', backupName(), text);
-      return true;
-    }
+
     return false;
   }
+
+  /* 原生那边存完（或用户取消）后回调过来。
+     之前的问题是：文件其实存下来了，但界面一声不吭，让人以为没保存成功。 */
+  window.__buSaveResult = function (ok) {
+    if (ok && lastBackupName) {
+      alert('已保存：' + lastBackupName + '\n\n在你刚才选的那个文件夹里。');
+    }
+  };
 
   if (window.URL && typeof URL.createObjectURL === 'function') {
     var origCreate = URL.createObjectURL;
