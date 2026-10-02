@@ -387,9 +387,18 @@ body{
     <div class="card">
       <h2>💾 数据导入导出</h2>
       <button class="btn-add" id="exportAllBtn">导出全部备份</button>
-      <div class="form-row" style="margin-top:12px">
-        <label>导入备份文本</label>
-        <textarea id="importTextArea" placeholder="粘贴备份内容"></textarea>
+
+      <h3>① 选备份文件</h3>
+      <div class="form-row">
+        <label>选「导出全部备份」得到的那份 txt</label>
+        <input type="file" accept=".txt,.json,text/plain,application/json" id="importFile">
+      </div>
+      <div class="item-note" id="importFileHint">选好文件后，内容会自动填到下面，确认没问题再点「执行导入恢复」。</div>
+
+      <h3>② 确认模式并恢复</h3>
+      <div class="form-row">
+        <label>备份内容（也可以直接在这里粘贴）</label>
+        <textarea id="importTextArea" placeholder="选择上面的文件，或把备份内容粘贴到这里"></textarea>
       </div>
       <select id="importModeSel">
         <option value="append">追加合并旧数据</option>
@@ -1397,23 +1406,39 @@ function applyWallpaper(){
 
 /* 导入导出 */
 function exportAll(){
-  const out={app:"卜卜迷你工作台",version:2,taskData:data,wishes:getWishes(),futures:getFutures(),purchases:getPurchases(),wallpaper:wallpaperCfg};
+  const out={app:"卜卜迷你工作台",version:2,exportedAt:new Date().toISOString(),taskData:data,wishes:getWishes(),futures:getFutures(),purchases:getPurchases(),wallpaper:wallpaperCfg};
   const blob=new Blob([JSON.stringify(out,null,2)],{type:"text/plain"});
   const a=document.createElement("a");
   a.href=URL.createObjectURL(blob);
-  a.download="卜卜迷你工作台备份.txt";
+  a.download=backupFileName();
   a.click();
+}
+
+/* 备份文件名带日期时间。否则每次导出都叫同一个名字，攒几份就分不清该恢复哪个。
+   格式：卜卜迷你工作台备份-20261002-1435.txt
+   注意：native-bridge.js 里有一份同样的实现（App 里存盘时用的是那边算的名字），
+   改这里记得同步改那边。 */
+function backupFileName(){
+  const d=new Date(), p=n=>String(n).padStart(2,"0");
+  return "卜卜迷你工作台备份-"+d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+"-"+p(d.getHours())+p(d.getMinutes())+".txt";
 }
 function importAll(){
   const text=$("importTextArea").value.trim();
-  if(!text){alert("请先粘贴备份内容");return;}
+  if(!text){alert("请先选择备份文件，或把备份内容粘贴到下面的框里。");return;}
   let d;
-  try{d=JSON.parse(text);}catch(e){alert("备份解析失败，请检查内容");return;}
+  try{d=JSON.parse(text);}catch(e){alert("备份解析失败。请确认内容是本应用「导出全部备份」得到的那份文件。");return;}
   const mode=$("importModeSel").value;
   const incomingPlan=d.taskData||null;
-  const hasPlan=incomingPlan||d.gongkao||d.health;
-  const hasWish=d.wishes||d.purchases||d.futures;
-  if(!hasPlan&&!hasWish){alert("没有识别到可导入的数据");return;}
+  const hasPlan=!!incomingPlan||!!d.gongkao||!!d.health;
+  const hasWish=Array.isArray(d.wishes)||Array.isArray(d.purchases)||Array.isArray(d.futures);
+  if(!hasPlan&&!hasWish){alert("没有在备份里识别到可导入的数据。");return;}
+
+  /* 记下导入前的数量，结束后告诉用户实际增加了多少 */
+  const cnt=()=>({
+    gk:(data.gongkao||[]).length, hl:(data.health||[]).length,
+    w:getWishes().length, f:getFutures().length, p:getPurchases().length
+  });
+  const before=cnt();
 
   if(hasPlan){
     const src=incomingPlan||d;
@@ -1453,7 +1478,17 @@ function importAll(){
   }
   applyWallpaper();
   renderAll();
-  alert("导入完成");
+  const after=cnt();
+  const dlt=(a,b)=>{const n=b-a;return n>0?"+"+n:(n<0?String(n):"±0");};
+  const lines=[];
+  if(hasPlan){
+    lines.push("考公 "+after.gk+" 条（"+dlt(before.gk,after.gk)+"）　健康 "+after.hl+" 条（"+dlt(before.hl,after.hl)+"）");
+  }
+  if(hasWish){
+    lines.push("心愿 "+after.w+" 条（"+dlt(before.w,after.w)+"）　未来清单 "+after.f+" 条（"+dlt(before.f,after.f)+"）");
+    lines.push("购入复盘 "+after.p+" 条（"+dlt(before.p,after.p)+"）");
+  }
+  alert("导入完成（"+(mode==="overwrite"?"覆盖模式":"追加合并模式")+"）" + "\n\n" + lines.join("\n"));
 }
 
 /* ============================================================
@@ -1553,6 +1588,63 @@ function bindEvents(){
     reader.onload=ev=>{wallpaperCfg.bgDataUrl=ev.target.result;saveJSON(K.wallpaper,wallpaperCfg);applyWallpaper();};
     reader.readAsDataURL(file);
   };
+
+  /* 从 txt 文件导入备份：读出来填进文本框，让用户先确认再恢复 */
+  $("importFile").onchange=e=>{
+    const file=e.target.files[0];
+    if(!file) return;
+    const hint=$("importFileHint");
+    if(file.size>5*1024*1024){
+      alert("备份文件不能大于 5MB");
+      e.target.value="";
+      return;
+    }
+
+    hint.textContent="正在读取 "+file.name+" ...";
+    const reader=new FileReader();
+
+    reader.onload=ev=>{
+      const text=String(ev.target.result||"");
+      let d=null;
+      try{ d=JSON.parse(text.trim()); }catch(err){ d=null; }
+
+      if(!d || typeof d!=="object"){
+        $("importTextArea").value="";
+        hint.innerHTML="<b>「"+esc(file.name)+"」不是有效的备份文件</b><br>内容不是合法的 JSON。请确认选的是本应用「导出全部备份」得到的那份 txt。";
+        return;
+      }
+
+      $("importTextArea").value=text;
+
+      /* 把识别到的内容列出来，让人一眼看出选对文件没有 */
+      const bits=[];
+      const plan=d.taskData||d;
+      if(d.taskData||d.gongkao||d.health){
+        const gk=(plan.gongkao||[]).length, hl=(plan.health||[]).length;
+        bits.push("计划（考公 "+gk+" 条 / 健康 "+hl+" 条）");
+      }
+      if(Array.isArray(d.wishes))    bits.push("心愿 "+d.wishes.length+" 条");
+      if(Array.isArray(d.futures))   bits.push("未来清单 "+d.futures.length+" 条");
+      if(Array.isArray(d.purchases)) bits.push("购入复盘 "+d.purchases.length+" 条");
+      if(d.wallpaper&&d.wallpaper.bgDataUrl) bits.push("自定义壁纸");
+
+      let when="";
+      if(d.exportedAt){
+        const t=new Date(d.exportedAt);
+        if(!isNaN(t.getTime())) when=" 导出时间 "+fmtDate(d.exportedAt)+" "+String(t.getHours()).padStart(2,"0")+":"+String(t.getMinutes()).padStart(2,"0")+"。";
+      }else{
+        when=" （这份备份没有时间标记，可能是旧版本导出的。）";
+      }
+
+      hint.innerHTML="已读取 <b>"+esc(file.name)+"</b>（"+(file.size/1024).toFixed(1)+" KB）。<br>"+
+        "识别到："+(bits.length?bits.join("、"):"<b>没有识别到已知数据</b>")+"。"+when+
+        "<br>确认下面的模式后，点「执行导入恢复」。";
+    };
+
+    reader.onerror=()=>{ hint.textContent="读取失败，请重试"; };
+    reader.readAsText(file,"utf-8");
+  };
+
   $("bgOpacitySlider").oninput=e=>{wallpaperCfg.maskOpacity=Number(e.target.value);saveJSON(K.wallpaper,wallpaperCfg);applyWallpaper();};
   $("resetBgBtn").onclick=()=>{wallpaperCfg.bgDataUrl="";saveJSON(K.wallpaper,wallpaperCfg);applyWallpaper();};
 

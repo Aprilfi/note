@@ -31,7 +31,16 @@
   'use strict';
 
   var doc = document;
-  var BACKUP_NAME = '卜卜迷你工作台备份.txt';
+  /* 备份文件名带日期时间，避免每次导出都叫同一个名字。
+     格式：卜卜迷你工作台备份-20261002-1435.txt
+     注意：index.html 里有一份同样的实现（浏览器下载用的是那边算的名字），
+     改这里记得同步改那边。 */
+  function backupName() {
+    var d = new Date();
+    var p = function (n) { return (n < 10 ? '0' : '') + n; };
+    return '卜卜迷你工作台备份-' + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate())
+         + '-' + p(d.getHours()) + p(d.getMinutes()) + '.txt';
+  }
   var CAP = (window.Capacitor && window.Capacitor.Plugins) || null;
   var AB = window.AndroidBu || null;          // 自写壳的桥
 
@@ -118,25 +127,25 @@
     // (a) Capacitor：写进 App 私有目录再调系统分享
     if (CAP && CAP.Filesystem && typeof CAP.Filesystem.writeFile === 'function') {
       CAP.Filesystem.writeFile({
-        path: BACKUP_NAME,
+        path: backupName(),
         data: text,
         directory: 'DOCUMENTS',
         encoding: 'utf8'
       }).then(function (res) {
         log('backup written: ' + (res && res.uri));
         if (CAP.Share && typeof CAP.Share.share === 'function') {
-          return CAP.Share.share({ title: BACKUP_NAME, url: res.uri });
+          return CAP.Share.share({ title: backupName(), url: res.uri });
         }
       }).catch(function (e) { log('backup failed: ' + e); });
       return true;
     }
     // (b) 自写壳注入的保存函数
     if (typeof window.__BU_SAVE__ === 'function') {
-      try { window.__BU_SAVE__(BACKUP_NAME, text); return true; } catch (e) { log('__BU_SAVE__ failed: ' + e); }
+      try { window.__BU_SAVE__(backupName(), text); return true; } catch (e) { log('__BU_SAVE__ failed: ' + e); }
     }
     // (c) Android JavascriptInterface
     if (AB && typeof AB.saveBackup === 'function') {
-      nativeCall('saveBackup', BACKUP_NAME, text);
+      nativeCall('saveBackup', backupName(), text);
       return true;
     }
     return false;
