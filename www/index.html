@@ -120,6 +120,27 @@ button{border:none;border-radius:12px;padding:9px 12px;cursor:pointer;font-weigh
   box-shadow:0 12px 28px #0000002e;opacity:.95}
 .drag-ghost.merging{background:#ffeaf4;border-style:dashed}
 .drag-ghost .drag-hint{display:block;margin-top:6px;font-size:12.5px;color:#b04075;font-weight:bold}
+
+/* ---------- 分区（心愿 / 复盘共用） ---------- */
+.wish-group{margin-bottom:14px}
+.group-head{display:flex;align-items:center;gap:8px;padding:9px 12px;background:#ffe4f0;
+  border-radius:14px;margin-bottom:8px;-webkit-user-select:none;user-select:none;
+  -webkit-touch-callout:none}
+.group-grip{color:#c98bab;font-size:15px;letter-spacing:-2px;padding:0 2px}
+.group-title{flex:1;min-width:0;font-weight:bold;color:#b04075;font-size:15px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.group-count{font-size:12.5px;color:#a9698c;background:#fff;border-radius:99px;padding:1px 8px}
+.group-ops{display:flex;gap:0}
+.group-ops button{padding:5px 9px;font-size:12.5px;margin-left:4px}
+.group-items{min-height:6px}
+.group-items:empty::after{content:"把条目拖到这里";display:block;padding:9px;text-align:center;
+  font-size:12.5px;color:#c9a3b6;border:1px dashed #f2c8dc;border-radius:12px}
+.group-head.dragging,.item-card.dragging{opacity:.28}
+/* 条目也要关掉长按选词，否则长按会被 WebView 当成选词、拖不起来
+   （和评论那条一样的坑） */
+.item-card{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.group-head.ins-before,.item-card.ins-before{box-shadow:0 -3px 0 #e878a2}
+.group-head.ins-after,.item-card.ins-after{box-shadow:0 3px 0 #e878a2}
 .tag{display:inline-block;padding:3px 8px;border-radius:99px;background:#f8c8e0;font-size:12px;margin-right:6px;color:#882e60}
 
 /* ---------- 心愿 / 复盘 ---------- */
@@ -295,10 +316,6 @@ body{
           <option value="food">吃喝零食</option>
           <option value="other">其他</option>
         </select>
-        <select id="wishSortSel">
-          <option value="ct">创建时间（最新在前）</option>
-          <option value="ct-asc">创建时间（最早在前）</option>
-        </select>
       </div>
       <div id="wishListContainer"></div>
     </div>
@@ -417,6 +434,10 @@ body{
     <input id="editWishSpec" placeholder="型号 / 容量 / 颜色，用来区分同类里的不同款">
   </div>
   <div class="form-row">
+    <label>分区</label>
+    <select id="editWishGroup"></select>
+  </div>
+  <div class="form-row">
     <label>物品分类</label>
     <select id="editWishCategory">
       <option value="beautiful">美丽美妆</option>
@@ -436,6 +457,21 @@ body{
   </div>
   <button class="btn-add" id="saveEditWishBtn">保存</button>
   <button class="btn-edit" id="closeEditWishBtn">取消</button>
+</div>
+</div>
+
+<!-- 分区标题弹窗（心愿 / 复盘共用） -->
+<div class="modal-overlay" id="groupEditModal">
+<div class="modal">
+  <h2 id="groupModalTitle">新增分区</h2>
+  <input type="hidden" id="groupModalKind">
+  <input type="hidden" id="groupModalId">
+  <div class="form-row">
+    <label>分区标题</label>
+    <input id="groupModalTitleInput" placeholder="比如：耳机三选一 / 通勤包">
+  </div>
+  <button class="btn-add" id="groupModalSave">保存</button>
+  <button class="btn-edit" id="groupModalCancel">取消</button>
 </div>
 </div>
 
@@ -1039,7 +1075,9 @@ function delInspireTop(id){data.msg.socialTop=data.msg.socialTop.filter(i=>i.id!
    二、心愿模块（心愿清单 / 未来清单 / 购入复盘）
    沿用原 2wish 的存储键，老数据可直接读取
 ============================================================ */
-const K={wishes:"wishlist_wishes_v2",purchases:"wishlist_purchases_v2",futures:"wishlist_futures_v1",wallpaper:"wishlist_wallpaper_v2"};
+const K={wishes:"wishlist_wishes_v2",wishGroups:"wishlist_wishgroups_v1",
+         purchases:"wishlist_purchases_v2",purchaseGroups:"wishlist_purchasegroups_v1",
+         futures:"wishlist_futures_v1",wallpaper:"wishlist_wallpaper_v2"};
 const CAT_MAP={beautiful:"美丽美妆",efficiency:"效率工具",comfort:"居家舒适",food:"吃喝零食",other:"其他"};
 const CAT_ICON={beautiful:"💄",efficiency:"⚡",comfort:"🛋️",food:"🍰",other:"🎀"};
 
@@ -1047,6 +1085,45 @@ let appState={page:"plan",planSub:"gk",wishSub:"cool",wishCatFilter:"",wishSort:
 
 function getWishes(){return loadJSON(K.wishes,[]);}
 function saveWishes(a){saveJSON(K.wishes,a);}
+function getWishGroups(){return loadJSON(K.wishGroups,[]);}
+function saveWishGroups(a){saveJSON(K.wishGroups,a);}
+function getPurchaseGroups(){return loadJSON(K.purchaseGroups,[]);}
+function savePurchaseGroups(a){saveJSON(K.purchaseGroups,a);}
+
+/* ============================================================
+   分区（分组）
+   ------------------------------------------------------------
+   数据结构刻意没用嵌套，而是"平铺的条目 + 另外一份分区表"：
+     wishes      = [{id,name,...,groupId}]      ← 数组顺序就是显示顺序
+     wishGroups  = [{id,title}]                 ← 数组顺序就是分区顺序
+   这样所有老代码（按 id 查找、过滤、统计）都不用改，只要渲染时按分区拆开。
+
+   ensureGroups 负责两件事：
+     1. 第一次用（或分区表被清空）时，建一个「未分组」并把老数据都放进去
+     2. 清掉指向已删除分区的 groupId，避免条目变成孤儿看不见
+   ============================================================ */
+function ensureGroups(rawItems, getGroupsFn, saveGroupsFn, saveItemsFn){
+  let groups=getGroupsFn();
+  if(!Array.isArray(groups) || groups.length===0){
+    groups=[{id:"wg_default",title:"未分组"}];
+    saveGroupsFn(groups);
+  }
+  const valid={};
+  groups.forEach(g=>{valid[g.id]=1;});
+  const items=rawItems();
+  let changed=false;
+  items.forEach(it=>{
+    if(!it.groupId || !valid[it.groupId]){ it.groupId=groups[0].id; changed=true; }
+  });
+  if(changed) saveItemsFn(items);
+  return {groups:groups, items:items};
+}
+function ensureWishGroups(){
+  return ensureGroups(getWishes, getWishGroups, saveWishGroups, saveWishes);
+}
+function ensurePurchaseGroups(){
+  return ensureGroups(getPurchases, getPurchaseGroups, savePurchaseGroups, savePurchases);
+}
 function getPurchases(){return loadJSON(K.purchases,[]);}
 function savePurchases(a){saveJSON(K.purchases,a);}
 function getFutures(){return loadJSON(K.futures,[]);}
@@ -1098,17 +1175,15 @@ function renderWishList(){
   const all=getWishes();
   let arr=all.filter(w=>!bought[w.id]);
   if(arr.length!==all.length) saveWishes(arr);
-  if(appState.wishCatFilter) arr=arr.filter(w=>w.category===appState.wishCatFilter);
-  const sortKey=$("wishSortSel").value||appState.wishSort;
-  appState.wishSort=sortKey;
-  if(sortKey==="ct-asc") arr.sort((a,b)=>Date.parse(a.createdAt)-Date.parse(b.createdAt));
-  else arr.sort((a,b)=>Date.parse(b.createdAt)-Date.parse(a.createdAt));
 
-  $("wishTopStats").innerHTML=`🐾 心愿清单共 <b>${arr.length}</b> 条`;
-  let html="";
-  arr.forEach(w=>{
-    html+=`
-<div class="item-card">
+  const groups=ensureWishGroups().groups;
+  if(appState.wishCatFilter) arr=arr.filter(w=>w.category===appState.wishCatFilter);
+
+  $("wishTopStats").innerHTML=`🐾 心愿清单共 <b>${arr.length}</b> 条 · <b>${groups.length}</b> 个分区<br>`+
+    `<span style="font-size:13px">（拖拽排序 / 跨分区归类正在调试，暂不可用）</span>`;
+
+  const card=w=>`
+<div class="item-card" data-id="${w.id}" data-gid="${w.groupId}">
   <div><span class="item-title">${CAT_ICON[w.category]||"🎀"} ${esc(w.name)}</span></div>
   <div style="margin-top:6px">
     <span class="tag">${CAT_MAP[w.category]||"其他"}</span>
@@ -1122,11 +1197,36 @@ function renderWishList(){
     <button class="btn-del del-wish-btn" data-id="${w.id}">删除</button>
   </div>
 </div>`;
+
+  let html="";
+  groups.forEach(g=>{
+    const items=arr.filter(w=>w.groupId===g.id);
+    html+=`
+<div class="wish-group">
+  <div class="group-head" data-gid="${g.id}">
+    <span class="group-grip">⋮⋮</span>
+    <span class="group-title">${esc(g.title)}</span>
+    <span class="group-count">${items.length}</span>
+    <span class="group-ops">
+      <button class="btn-edit group-rename" data-gid="${g.id}">改名</button>
+      <button class="btn-del group-del" data-gid="${g.id}">删</button>
+    </span>
+  </div>
+  <div class="group-items" data-gid="${g.id}">${items.map(card).join("")}</div>
+  <button class="btn-add btn-wide group-add" data-gid="${g.id}">＋ 加到这个分区</button>
+</div>`;
   });
-  if(arr.length===0) html='<div class="card" style="text-align:center;color:#9a7386">暂无心愿记录，点上面的【➕ 新增心愿】记一笔吧～</div>';
+  if(arr.length===0){
+    html+=`<div class="card" style="text-align:center;color:#9a7386">还一条心愿都没有，点上面的【➕ 新增心愿】记一笔吧～</div>`;
+  }
+  html+=`<button class="btn-edit btn-wide" id="addWishGroupBtn" style="margin-top:6px">＋ 新增分区</button>`;
   container.innerHTML=html;
+
   container.querySelectorAll(".edit-wish-btn").forEach(btn=>btn.onclick=()=>openWishModal(btn.dataset.id));
   container.querySelectorAll(".buy-wish-btn").forEach(btn=>btn.onclick=()=>openBuyModal("wish",btn.dataset.id));
+  container.querySelectorAll(".group-add").forEach(btn=>btn.onclick=()=>openWishModal(null,btn.dataset.gid));
+  container.querySelectorAll(".group-rename").forEach(btn=>btn.onclick=()=>openGroupModal("wish",btn.dataset.gid));
+  container.querySelectorAll(".group-del").forEach(btn=>btn.onclick=()=>delGroup("wish",btn.dataset.gid));
   container.querySelectorAll(".del-wish-btn").forEach(btn=>btn.onclick=async()=>{
     const item=getWishes().find(x=>x.id===btn.dataset.id);
     const ok=await showConfirm("删除心愿","确认删除心愿【"+(item?item.name:"")+"】？");
@@ -1134,6 +1234,217 @@ function renderWishList(){
     saveWishes(getWishes().filter(w=>w.id!==btn.dataset.id));
     renderWishList();
   });
+  $("addWishGroupBtn").onclick=()=>openGroupModal("wish",null);
+  enableSortable(container, "wish");
+}
+
+/* ============================================================
+   分区：增 / 改名 / 删（心愿与复盘共用）
+   ============================================================ */
+const GROUP_META={
+  wish:{
+    get:getWishGroups, save:saveWishGroups,
+    getItems:getWishes, saveItems:saveWishes,
+    rerender:()=>renderWishList()
+  },
+  purchase:{
+    get:getPurchaseGroups, save:savePurchaseGroups,
+    getItems:getPurchases, saveItems:savePurchases,
+    rerender:()=>renderReviewPage()
+  }
+};
+
+function openGroupModal(kind,id){
+  const meta=GROUP_META[kind];
+  if(!meta) return;
+  const g=id?meta.get().find(x=>x.id===id):null;
+  $("groupModalTitle").innerText=g?"修改分区标题":"新增分区";
+  $("groupModalKind").value=kind;
+  $("groupModalId").value=g?g.id:"";
+  $("groupModalTitleInput").value=g?g.title:"";
+  $("groupEditModal").style.display="flex";
+}
+function saveGroupModal(){
+  const meta=GROUP_META[$("groupModalKind").value];
+  if(!meta) return;
+  const id=$("groupModalId").value;
+  const title=$("groupModalTitleInput").value.trim()||"未命名分区";
+  const groups=meta.get();
+  if(id){
+    const g=groups.find(x=>x.id===id);
+    if(g) g.title=title;
+  }else{
+    groups.push({id:uid("wg"),title:title});
+  }
+  meta.save(groups);
+  $("groupEditModal").style.display="none";
+  meta.rerender();
+}
+async function delGroup(kind,id){
+  const meta=GROUP_META[kind];
+  if(!meta) return;
+  const groups=meta.get();
+  if(groups.length<=1){ alert("至少要留一个分区。想减少的话把标题改掉就行，最后一个删不掉。"); return; }
+  const g=groups.find(x=>x.id===id);
+  const n=meta.getItems().filter(x=>x.groupId===id).length;
+  const ok=await showConfirm("删除分区",
+    "确定删除分区【"+(g?g.title:"")+"】？"+(n?("\n\n里面的 "+n+" 条会挪到第一个分区，不会丢。"):""));
+  if(!ok) return;
+  const keep=groups.find(x=>x.id!==id).id;
+  groups.splice(groups.findIndex(x=>x.id===id),1);
+  meta.save(groups);
+  const arr=meta.getItems(); let ch=false;
+  arr.forEach(x=>{ if(x.groupId===id){ x.groupId=keep; ch=true; } });
+  if(ch) meta.saveItems(arr);
+  meta.rerender();
+}
+
+/* ============================================================
+   分区 / 条目 的拖拽排序（心愿与复盘共用）
+   复用第 3 步评论拖拽的思路：长按拾起 → 跟手 → 松手落下。这里没有"合并"。
+     抓住分区标题 → 调整分区顺序
+     抓住条目     → 在条目之间排序，或拖到别的分区完成归类
+   ============================================================ */
+function enableSortable(container, kind){
+  if(!container || container.__sortBound) return;
+  container.__sortBound=true;
+  const meta=GROUP_META[kind];
+  if(!meta) return;
+
+  let pressTimer=null, dragEl=null, ghost=null, mode=null, dragId=null;
+  let startY=0, startX=0, grabY=0, ghostTop0=0, hoverEl=null;
+
+  const clearMarks=()=>{
+    container.querySelectorAll(".ins-before,.ins-after,.dragging").forEach(x=>
+      x.classList.remove("ins-before","ins-after","dragging"));
+  };
+  const findSel=(node,sel)=>{
+    while(node && node!==container){
+      if(node.classList && node.classList.contains(sel)) return node;
+      node=node.parentNode;
+    }
+    return null;
+  };
+
+  function beginDrag(el,y){
+    if(el.classList.contains("group-head")){ mode="group"; dragId=el.dataset.gid; }
+    else if(el.classList.contains("item-card")){ mode="item"; dragId=el.dataset.id; }
+    else return;
+    dragEl=el;
+    clearMarks();
+    el.classList.add("dragging");
+    const r=el.getBoundingClientRect();
+    grabY=y; ghostTop0=r.top;
+    ghost=el.cloneNode(true);
+    ghost.className="drag-ghost";
+    ghost.style.left=r.left+"px"; ghost.style.top=r.top+"px"; ghost.style.width=r.width+"px";
+    const hint=document.createElement("span");
+    hint.className="drag-hint";
+    hint.textContent = mode==="group" ? "拖到别的分区标题上 = 调整分区顺序"
+                                      : "放到条目上下 = 排序　·　拖到别的分区 = 归类";
+    ghost.appendChild(hint);
+    document.body.appendChild(ghost);
+    document.addEventListener("touchmove", onMove, {passive:false});
+    document.addEventListener("touchend", onEnd);
+    document.addEventListener("touchcancel", onEnd);
+  }
+
+  function onMove(e){
+    if(!ghost) return;
+    e.preventDefault();
+    const t=e.touches[0];
+    ghost.style.top=(ghostTop0 + (t.clientY - grabY))+"px";
+
+    const under=document.elementFromPoint(t.clientX, t.clientY);
+    let target=null, isBox=false;
+    if(mode==="group"){
+      target=findSel(under,"group-head");
+      if(target===dragEl) target=null;
+    }else{
+      target=findSel(under,"item-card");
+      if(target===dragEl) target=null;
+      if(!target){
+        const box=findSel(under,"group-items");
+        if(box){ target=box; isBox=true; }
+      }
+    }
+
+    if(target!==hoverEl){
+      container.querySelectorAll(".ins-before,.ins-after").forEach(x=>
+        x.classList.remove("ins-before","ins-after"));
+      hoverEl=target;
+    }
+    if(!target || isBox) return;          // 落到分区容器上时不用画插入线
+    const r=target.getBoundingClientRect();
+    const before=t.clientY < r.top + r.height/2;
+    target.classList.remove("ins-before","ins-after");
+    target.classList.add(before?"ins-before":"ins-after");
+  }
+
+  function onEnd(){
+    document.removeEventListener("touchmove", onMove);
+    document.removeEventListener("touchend", onEnd);
+    document.removeEventListener("touchcancel", onEnd);
+
+    const target=hoverEl, m=mode, id=dragId;
+    const before=target ? target.classList.contains("ins-before") : false;
+    if(ghost){ ghost.remove(); ghost=null; }
+    clearMarks();
+    dragEl=null; hoverEl=null; mode=null; dragId=null;
+    if(!target || !m || !id) return;
+
+    if(m==="group"){
+      const groups=meta.get();
+      const fromIdx=groups.findIndex(x=>x.id===id);
+      if(fromIdx<0) return;
+      const moved=groups.splice(fromIdx,1)[0];
+      let toIdx=groups.findIndex(x=>x.id===target.dataset.gid);
+      if(toIdx<0){ groups.splice(fromIdx,0,moved); return; }
+      if(!before) toIdx+=1;
+      groups.splice(toIdx,0,moved);
+      meta.save(groups);
+    }else{
+      const arr=meta.getItems();
+      const fromIdx=arr.findIndex(x=>x.id===id);
+      if(fromIdx<0) return;
+      const moved=arr.splice(fromIdx,1)[0];
+      if(target.classList.contains("group-items")){
+        moved.groupId=target.dataset.gid;
+        arr.push(moved);
+      }else{
+        const tId=target.dataset.id;
+        const t=arr.find(x=>x.id===tId);
+        if(t) moved.groupId=t.groupId;
+        let toIdx=arr.findIndex(x=>x.id===tId);
+        if(toIdx<0){ arr.push(moved); }
+        else{ if(!before) toIdx+=1; arr.splice(toIdx,0,moved); }
+      }
+      meta.saveItems(arr);
+    }
+    meta.rerender();
+  }
+
+  container.addEventListener("touchstart", e=>{
+    if(e.touches.length!==1) return;
+    if(e.target.closest && e.target.closest("button")) return;   // 按钮不触发拖拽
+    const el=findSel(e.target,"group-head") || findSel(e.target,"item-card");
+    if(!el) return;
+    const t=e.touches[0];
+    if(pressTimer) clearTimeout(pressTimer);
+    startY=t.clientY; startX=t.clientX;
+    pressTimer=setTimeout(()=>beginDrag(el, t.clientY), DRAG_LONG_PRESS);
+  }, {passive:true});
+  container.addEventListener("touchmove", e=>{
+    if(pressTimer && !ghost){
+      const t=e.touches[0];
+      if(Math.abs(t.clientY-startY)>10 || Math.abs(t.clientX-startX)>10){
+        clearTimeout(pressTimer); pressTimer=null;
+      }
+    }
+  }, {passive:true});
+  container.addEventListener("touchend", ()=>{
+    if(pressTimer){ clearTimeout(pressTimer); pressTimer=null; }
+  }, {passive:true});
 }
 
 /* ---------- 未来清单 ---------- */
@@ -1183,10 +1494,13 @@ function renderFutureList(){
 /* ---------- 新增 / 编辑心愿：共用一个弹窗 ----------
    传 id 就是编辑，传 null/空就是新增。
    以前"新增"占一个独立子标签、字段还和编辑各写一套，现在合并成一份表单。 */
-function openWishModal(id){
+function openWishModal(id, presetGroupId){
   const w=id?getWishes().find(x=>x.id===id):null;
+  const groups=ensureWishGroups().groups;
   $("wishModalTitle").innerText = w ? "✏️ 编辑心愿" : "✨ 新增心愿";
   $("editWishId").value        = w ? w.id : "";
+  $("editWishGroup").innerHTML = groups.map(g=>`<option value="${g.id}">${esc(g.title)}</option>`).join("");
+  $("editWishGroup").value     = w ? (w.groupId||groups[0].id) : (presetGroupId||groups[0].id);
   $("editWishName").value      = w ? w.name : "";
   $("editWishSpec").value      = w ? (w.spec||"") : "";
   $("editWishCategory").value  = (w && w.category) || "other";
@@ -1206,6 +1520,7 @@ function saveWishModal(){
     name:name,
     spec:$("editWishSpec").value.trim(),
     category:$("editWishCategory").value,
+    groupId:$("editWishGroup").value,
     defectNote:$("editWishDefectNote").value.trim(),
     note:$("editWishNote").value.trim()
   };
@@ -1545,7 +1860,11 @@ function applyWallpaper(){
 
 /* 导入导出 */
 function exportAll(){
-  const out={app:"卜卜迷你工作台",version:2,exportedAt:new Date().toISOString(),taskData:data,wishes:getWishes(),futures:getFutures(),purchases:getPurchases(),wallpaper:wallpaperCfg};
+  const out={app:"卜卜迷你工作台",version:2,exportedAt:new Date().toISOString(),taskData:data,
+             wishes:getWishes(),wishGroups:getWishGroups(),
+             futures:getFutures(),
+             purchases:getPurchases(),purchaseGroups:getPurchaseGroups(),
+             wallpaper:wallpaperCfg};
   const blob=new Blob([JSON.stringify(out,null,2)],{type:"text/plain"});
   const a=document.createElement("a");
   a.href=URL.createObjectURL(blob);
@@ -1602,8 +1921,10 @@ function importAll(){
   if(hasWish){
     if(mode==="overwrite"){
       saveWishes(d.wishes||[]);
+      saveWishGroups(d.wishGroups||[]);
       saveFutures(d.futures||[]);
       savePurchases(d.purchases||[]);
+      savePurchaseGroups(d.purchaseGroups||[]);
       if(d.wallpaper){wallpaperCfg=d.wallpaper;saveJSON(K.wallpaper,wallpaperCfg);}
     }else{
       const w=getWishes(),f=getFutures(),p=getPurchases();
@@ -1611,6 +1932,13 @@ function importAll(){
       (d.futures||[]).forEach(x=>{if(!f.some(i=>i.id===x.id)) f.push(x);});
       (d.purchases||[]).forEach(x=>{if(!p.some(i=>i.id===x.id)) p.push(x);});
       saveWishes(w);saveFutures(f);savePurchases(p);
+      /* 追加重合模式：分区也按 id 合并，避免导入后条目找不到自己的分区 */
+      const mergeGroups=(incoming,cur)=>{
+        (incoming||[]).forEach(g=>{ if(g&&g.id && !cur.some(x=>x.id===g.id)) cur.push(g); });
+        return cur;
+      };
+      saveWishGroups(mergeGroups(d.wishGroups, getWishGroups()));
+      savePurchaseGroups(mergeGroups(d.purchaseGroups, getPurchaseGroups()));
     }
     migrateWishData();
   }
@@ -1704,6 +2032,8 @@ function bindEvents(){
   $("addWishBtn").onclick=()=>openWishModal(null);
   $("saveEditWishBtn").onclick=saveWishModal;
   $("closeEditWishBtn").onclick=()=>$("wishEditModal").style.display="none";
+  $("groupModalSave").onclick=saveGroupModal;
+  $("groupModalCancel").onclick=()=>$("groupEditModal").style.display="none";
   $("addFutureBtn").onclick=()=>openFutureModal(null);
   $("saveFutureBtn").onclick=saveFuture;
   $("closeFutureModal").onclick=()=>$("futureEditModal").style.display="none";
@@ -1713,7 +2043,6 @@ function bindEvents(){
   $("closePurEditBtn").onclick=()=>$("purchaseEditModal").style.display="none";
 
   $("wishCategoryFilter").onchange=e=>{appState.wishCatFilter=e.target.value;renderWishList();};
-  $("wishSortSel").onchange=e=>{appState.wishSort=e.target.value;renderWishList();};
   $("purchaseSearch").oninput=e=>{appState.purchaseSearchText=e.target.value.trim();renderReviewPage();};
   $("purchaseMonthSel").onchange=e=>{appState.purchaseMonth=e.target.value;renderReviewPage();};
 
@@ -1798,8 +2127,10 @@ function bindEvents(){
     const ok=await showConfirm("清空心愿数据","确定清空心愿、未来清单、购入复盘和壁纸吗？此操作不可恢复。");
     if(!ok) return;
     localStorage.removeItem(K.wishes);
+    localStorage.removeItem(K.wishGroups);
     localStorage.removeItem(K.futures);
     localStorage.removeItem(K.purchases);
+    localStorage.removeItem(K.purchaseGroups);
     localStorage.removeItem(K.wallpaper);
     wallpaperCfg={bgDataUrl:"",maskOpacity:60};
     applyWallpaper();renderAll();alert("心愿数据已清空");
