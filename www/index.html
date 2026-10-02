@@ -141,6 +141,14 @@ button{border:none;border-radius:12px;padding:9px 12px;cursor:pointer;font-weigh
 .item-card{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 .group-head.ins-before,.item-card.ins-before{box-shadow:0 -3px 0 #e878a2}
 .group-head.ins-after,.item-card.ins-after{box-shadow:0 3px 0 #e878a2}
+
+/* ---------- 就地添加（在各清单里直接加一条，不跳页不弹窗） ---------- */
+.inline-add{display:flex;gap:8px;align-items:center;margin-top:8px}
+.inline-add input{flex:1;min-width:0;padding:9px 11px;font-size:14px;border-radius:11px;background:#fff}
+.inline-add .ia-price{flex:0 0 84px;min-width:0;text-align:center}
+.inline-add .ia-plus{flex:0 0 auto;padding:9px 15px;font-size:16px;line-height:1;
+  border-radius:11px;background:#f28fb8;color:#fff}
+.inline-add .ia-plus:active{background:#e878a2}
 .tag{display:inline-block;padding:3px 8px;border-radius:99px;background:#f8c8e0;font-size:12px;margin-right:6px;color:#882e60}
 
 /* ---------- 心愿 / 复盘 ---------- */
@@ -322,7 +330,12 @@ body{
 
     <div id="wish-future" style="display:none">
       <div class="stats-hint" id="futureTopStats"></div>
-      <button class="btn-add" id="addFutureBtn">➕ 添加未来大件</button>
+      <div class="inline-add">
+        <input id="futureQuickName" placeholder="想攒的大件名称">
+        <input class="ia-price" id="futureQuickPrice" type="number" placeholder="目标价">
+        <button class="ia-plus" id="futureQuickAdd">＋</button>
+      </div>
+      <div class="item-note" style="margin-top:6px">只填名称也能加。备注、计划购入时间、已攒金额点【编辑】补充。</div>
       <div id="futureListContainer" style="margin-top:12px"></div>
     </div>
   </div>
@@ -1221,18 +1234,24 @@ function renderWishList(){
     </span>
   </div>
   <div class="group-items" data-gid="${g.id}">${items.map(card).join("")}</div>
-  <button class="btn-add btn-wide group-add" data-gid="${g.id}">＋ 加到这个分区</button>
+  <div class="inline-add">
+    <input class="ia-name" data-gid="${g.id}" placeholder="加到「${esc(g.title)}」：填名称，回车直接加">
+    <button class="ia-plus group-add" data-gid="${g.id}">＋</button>
+  </div>
 </div>`;
   });
   if(arr.length===0){
-    html+=`<div class="card" style="text-align:center;color:#9a7386">还一条心愿都没有，点上面的【➕ 新增心愿】记一笔吧～</div>`;
+    html+=`<div class="card" style="text-align:center;color:#9a7386">还一条心愿都没有，在上面任意分区的输入框里填一笔就行～</div>`;
   }
   html+=`<button class="btn-edit btn-wide" id="addWishGroupBtn" style="margin-top:6px">＋ 新增分区</button>`;
   container.innerHTML=html;
 
   container.querySelectorAll(".edit-wish-btn").forEach(btn=>btn.onclick=()=>openWishModal(btn.dataset.id));
   container.querySelectorAll(".buy-wish-btn").forEach(btn=>btn.onclick=()=>openBuyModal("wish",btn.dataset.id));
-  container.querySelectorAll(".group-add").forEach(btn=>btn.onclick=()=>openWishModal(null,btn.dataset.gid));
+  container.querySelectorAll(".group-add").forEach(btn=>btn.onclick=()=>quickAddWish(btn.dataset.gid));
+  container.querySelectorAll(".inline-add .ia-name").forEach(inp=>{
+    inp.onkeydown=e=>{ if(e.key==="Enter"){ e.preventDefault(); quickAddWish(inp.dataset.gid); } };
+  });
   container.querySelectorAll(".group-rename").forEach(btn=>btn.onclick=()=>openGroupModal("wish",btn.dataset.gid));
   container.querySelectorAll(".group-del").forEach(btn=>btn.onclick=()=>delGroup("wish",btn.dataset.gid));
   container.querySelectorAll(".del-wish-btn").forEach(btn=>btn.onclick=async()=>{
@@ -1503,7 +1522,7 @@ function renderFutureList(){
   </div>
 </div>`;
   });
-  if(arr.length===0) html='<div class="card" style="text-align:center;color:#9a7386">未来清单还空着，点上面【➕ 添加未来大件】把想攒的大件存进来～</div>';
+  if(arr.length===0) html='<div class="card" style="text-align:center;color:#9a7386">未来清单还空着，在上面那行填个名称（目标价选填）就能加进来～</div>';
   container.innerHTML=html;
   container.querySelectorAll(".edit-future-btn").forEach(btn=>btn.onclick=()=>openFutureModal(btn.dataset.id));
   container.querySelectorAll(".buy-future-btn").forEach(btn=>btn.onclick=()=>openBuyModal("future",btn.dataset.id));
@@ -1514,6 +1533,27 @@ function renderFutureList(){
     saveFutures(getFutures().filter(x=>x.id!==btn.dataset.id));
     renderFutureList();
   });
+}
+
+/* ---------- 就地快速添加（心愿 / 复盘共用同一套写法） ----------
+   只填名称就落一条在本分区，其它字段（规格、分类、预判风险、备注）留空，
+   之后点【编辑】再补。要一次填全的话，上面还有「➕ 新增心愿」的完整弹窗。 */
+function quickAddWish(gid){
+  const inp=document.querySelector(`.inline-add .ia-name[data-gid="${gid}"]`);
+  if(!inp) return;
+  const name=inp.value.trim();
+  if(!name){ inp.focus(); return; }
+  const arr=getWishes();
+  arr.push({
+    id:uid("wish"), createdAt:new Date().toISOString(),
+    name:name, spec:"", category:"other", defectNote:"", note:"",
+    groupId:gid
+  });
+  saveWishes(arr);
+  renderWishList();
+  /* 重渲染之后把光标放回同一个分区的输入框，方便连着录好几条 */
+  const again=document.querySelector(`.inline-add .ia-name[data-gid="${gid}"]`);
+  if(again) again.focus();
 }
 
 /* ---------- 新增 / 编辑心愿：共用一个弹窗 ----------
@@ -1740,6 +1780,11 @@ function renderReviewPage(){
     </span>
   </div>
   <div class="group-items" data-gid="${g.id}">${items.map(card).join("")}</div>
+  <div class="inline-add">
+    <input class="ia-name" data-gid="${g.id}" placeholder="加到「${esc(g.title)}」：名称">
+    <input class="ia-price" type="number" data-gid="${g.id}" placeholder="价格">
+    <button class="ia-plus pur-add" data-gid="${g.id}">＋</button>
+  </div>
 </div>`;
   });
   if(arr.length===0){
@@ -1753,6 +1798,11 @@ function renderReviewPage(){
   container.querySelectorAll(".edit-pur-btn").forEach(btn=>btn.onclick=()=>openPurchaseEdit(btn.dataset.id));
   container.querySelectorAll(".group-rename").forEach(btn=>btn.onclick=()=>openGroupModal("purchase",btn.dataset.gid));
   container.querySelectorAll(".group-del").forEach(btn=>btn.onclick=()=>delGroup("purchase",btn.dataset.gid));
+  container.querySelectorAll(".pur-add").forEach(btn=>btn.onclick=()=>quickAddPurchase(btn.dataset.gid,btn.closest(".inline-add")));
+  /* 两个输入框里按回车都算提交（价格那格也方便连着录） */
+  container.querySelectorAll(".inline-add input").forEach(inp=>{
+    inp.onkeydown=e=>{ if(e.key==="Enter"){ e.preventDefault(); quickAddPurchase(inp.dataset.gid,inp.closest(".inline-add")); } };
+  });
   container.querySelectorAll(".del-pur-btn").forEach(btn=>btn.onclick=async()=>{
     const item=getPurchases().find(x=>x.id===btn.dataset.id);
     const ok=await showConfirm("删除复盘记录","确认删除【"+(item?item.name:"")+"】的复盘记录吗？删除后不可恢复。");
@@ -1764,6 +1814,26 @@ function renderReviewPage(){
   if(agb) agb.onclick=()=>openGroupModal("purchase",null);
   enableSortable(container,"purchase");
   drawSpendChart(arr);
+}
+/* ---------- 就地快速添加复盘 ----------
+   名称必填，价格选填；使用感受标签和感受留空，之后点【编辑】慢慢补。 */
+function quickAddPurchase(gid,row){
+  if(!row) return;
+  const nameInp=row.querySelector(".ia-name");
+  const priceInp=row.querySelector(".ia-price");
+  const name=(nameInp.value||"").trim();
+  if(!name){ nameInp.focus(); return; }
+  const arr=getPurchases();
+  arr.push({
+    id:uid("pur"), createdAt:new Date().toISOString(),
+    name:name, groupId:gid, category:"other",
+    price:Number(priceInp.value)||0, budgetPrice:0,
+    state:"", feel:"", sourceWishId:"", sourceFutureId:""
+  });
+  savePurchases(arr);
+  renderReviewPage();
+  const again=document.querySelector(`.inline-add .ia-name[data-gid="${gid}"]`);
+  if(again) again.focus();
 }
 function openPurchaseEdit(id){
   const p=getPurchases().find(x=>x.id===id);
@@ -2079,7 +2149,27 @@ function bindEvents(){
   $("closeEditWishBtn").onclick=()=>$("wishEditModal").style.display="none";
   $("groupModalSave").onclick=saveGroupModal;
   $("groupModalCancel").onclick=()=>$("groupEditModal").style.display="none";
-  $("addFutureBtn").onclick=()=>openFutureModal(null);
+  /* 未来清单也是就地添加：名称 + 目标价，回车或点 ＋ 直接落一条。
+     要写备注 / 计划购入时间就加完再点【编辑】。 */
+  function quickAddFuture(){
+    const nameInp=$("futureQuickName"), priceInp=$("futureQuickPrice");
+    const name=nameInp.value.trim();
+    if(!name){ nameInp.focus(); return; }
+    const list=getFutures();
+    list.push({
+      id:uid("fut"), createdAt:new Date().toISOString(),
+      name:name, category:"other", targetPrice:Number(priceInp.value)||0,
+      saved:0, planDate:"", note:""
+    });
+    saveFutures(list);
+    nameInp.value=""; priceInp.value="";
+    renderFutureList();
+    nameInp.focus();
+  }
+  $("futureQuickAdd").onclick=quickAddFuture;
+  ["futureQuickName","futureQuickPrice"].forEach(id=>{
+    $(id).onkeydown=e=>{ if(e.key==="Enter"){ e.preventDefault(); quickAddFuture(); } };
+  });
   $("saveFutureBtn").onclick=saveFuture;
   $("closeFutureModal").onclick=()=>$("futureEditModal").style.display="none";
   $("confirmBuyBtn").onclick=confirmBuy;
