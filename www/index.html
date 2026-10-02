@@ -8,6 +8,8 @@
 <link rel="manifest" href="./manifest.json">
 <link rel="icon" href="./icons/icon-192.png">
 <link rel="apple-touch-icon" href="./icons/icon-192.png">
+<!-- 版本号：由 tools/build-apk.ps1 依据 package.json 自动生成，不要手改 -->
+<script src="./version.js"></script>
 <!-- Chart.js 本地化：APK 离线时不再依赖 CDN（原为 https://cdn.jsdelivr.net/npm/chart.js@4.4.8/...） -->
 <script src="./chart.umd.min.js"></script>
 <!-- 原生外壳桥接：返回键 / 安全区 / 导出下载兜底。全部逻辑集中在 native-bridge.js -->
@@ -398,6 +400,11 @@ body{
         <button class="btn-del" id="clearPlanBtn">清空计划数据</button>
         <button class="btn-del" id="clearWishBtn">清空心愿数据</button>
       </div>
+    </div>
+    <div class="card">
+      <h2>ℹ️ 关于</h2>
+      <div class="stats-hint" id="appVersionLine">正在读取版本…</div>
+      <div class="item-note">数据只保存在本机应用内，卸载或清除应用数据会一并丢失，请定期用上面的「导出全部备份」留一份。</div>
     </div>
   </div>
 

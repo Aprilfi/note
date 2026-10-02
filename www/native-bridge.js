@@ -175,11 +175,44 @@
     else { lastTouch = now; }
   }, { passive: false });
 
+  /* ============================================================
+     5. 版本号
+     设置页「关于」里显示当前版本。
+     原生环境用 @capacitor/app 的 getInfo()，拿到的是真正装在机器上那个包的
+     versionName / versionCode；浏览器里退回读 version.js 写入的常量。
+  ============================================================ */
+  function renderVersion() {
+    var box = doc.getElementById('appVersionLine');
+    if (!box) return;
+
+    function fromBuildFile() {
+      var v = window.__BU_VERSION__;
+      if (v && v.version) {
+        box.textContent = '版本 ' + v.version + '（内部版本号 ' + v.build + '） · 浏览器预览';
+      } else {
+        box.textContent = '版本信息不可用（缺少 version.js）';
+      }
+    }
+
+    if (CAP && CAP.App && typeof CAP.App.getInfo === 'function') {
+      CAP.App.getInfo().then(function (info) {
+        box.textContent = '版本 ' + info.version + '（内部版本号 ' + info.build + '）';
+      }).catch(function () { fromBuildFile(); });
+    } else {
+      fromBuildFile();
+    }
+  }
+
   /* ---------- 启动 ---------- */
-  if (doc.readyState === 'loading') {
-    doc.addEventListener('DOMContentLoaded', applyInsets);
-  } else {
+  function onReady() {
     applyInsets();
+    renderVersion();
+  }
+
+  if (doc.readyState === 'loading') {
+    doc.addEventListener('DOMContentLoaded', onReady);
+  } else {
+    onReady();
   }
   window.addEventListener('resize', applyInsets);
 

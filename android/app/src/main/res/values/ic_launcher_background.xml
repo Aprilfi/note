@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- 自适应图标背景的兜底色（正常走 @mipmap/ic_launcher_background 渐变图） -->
-    <color name="ic_launcher_background">#F28FB8</color>
+    <!-- 自适应图标背景的兜底色（正常走 @mipmap/ic_launcher_background 渐变图）。
+         取值是源图背景的上沿色，改成别的图时记得同步。 -->
+    <color name="ic_launcher_background">#2D7EE3</color>
 </resources>

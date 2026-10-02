@@ -46,17 +46,21 @@ android\app\build\outputs\apk\debug\app-debug.apk
 apk-build/
 ├─ www/                      ← 真正的应用代码，平时只改这里
 │  ├─ index.html               主页面（由原 HTML 转换而来，改动处有注释标注）
-│  ├─ native-bridge.js         原生桥接：返回键 / 安全区 / 导出下载兜底
+│  ├─ native-bridge.js         原生桥接：返回键 / 安全区 / 导出下载兜底 / 版本号
 │  ├─ chart.umd.min.js         Chart.js 本地化，离线可用
+│  ├─ version.js               版本号，编译时依据 package.json 自动生成
 │  ├─ manifest.json            PWA 清单（保留着，以后网页端也能装）
-│  └─ icons/                   图标与启动图
+│  └─ icons/                   PWA 图标（只放 144/192/512，别的会白占 APK 体积）
+├─ assets/icon-source.jpg    图标源图（换图标就替换这个文件）
 ├─ android/                  原生工程（Capacitor 生成，可提交进版本库）
 ├─ tools/
 │  ├─ build-apk.ps1            一键装工具链 + 编译
+│  ├─ icon-lib.ps1             图标绘制共用逻辑
 │  ├─ make-icons.ps1           生成 www/icons 下的图标与启动图
 │  └─ make-android-assets.ps1  把图标/启动图按密度写进 android 的 res 目录
 ├─ capacitor.config.json     应用 ID、名称、启动图、状态栏等
-├─ package.json              依赖与快捷命令
+├─ package.json              依赖、快捷命令、版本号唯一来源
+├─ CHANGELOG.md              更新日志
 └─ .github/workflows/        云端自动编译
 ```
 
@@ -165,11 +169,10 @@ npm run build:release
 | `android/gradle/wrapper/gradle-wrapper.properties` | Gradle 分发地址换成腾讯云镜像 | `services.gradle.org` 太慢 |
 | `tools/build-apk.ps1` | 不用 sdkmanager，改为直接从腾讯镜像下 SDK 的 zip | sdkmanager 的包源是 dl.google.com，下不动 |
 
-关于 `buildToolsVersion`：`android/app/build.gradle` 里目前写着 `"34.0.0"`，
-这是搭建时按腾讯镜像下的 build-tools 版本钉的。后来确认镜像上其实也有
-35 / 36 / 37（只是文件名用的是下划线，`build-tools_r35_windows.zip`，
-当时按连字符探测所以漏了）。所以这行不是必须的 —— 想升到 AGP 8.7 默认的
-35.0.0，把 build-tools 35 下下来、删掉这行即可。
+关于 `buildToolsVersion`：`android/app/build.gradle` 里**没有**写这一项，
+是为了让 AGP 用它自带的默认值（当前 35.0.0）。钉死某个版本会让 CI
+或换一台机器时因为缺少该特定版本而失败。`tools/build-apk.ps1` 里装的
+也是 build-tools 35.0.0，两边保持一致。
 
 另外 `build.gradle` 里的镜像 URL 故意重复写了三次而不是抽成变量 ——
 Gradle 的 `buildscript` 块会被提前单独求值，读不到脚本里的局部变量，
@@ -230,17 +233,21 @@ git push
 ### 发一个版本
 
 ```powershell
-# 1. 改 package.json 里的 version
-# 2. 编译
+# 1. 把 CHANGELOG.md 里「未发布」的条目归到新版本号下，写上日期
+# 2. 改 package.json 里的 version
+# 3. 编译
 npm run build:release
-# 3. 提交并打标签
+# 4. 提交并打标签
 git add -A
 git commit -m "发布 1.1.0"
 git tag v1.1.0
 git push
 git push --tags
-# 4. 到 GitHub 的 Releases 页面把 APK 传上去
+# 5. 到 GitHub 的 Releases 页面把 APK 传上去
 ```
+
+改动记录写在 [CHANGELOG.md](CHANGELOG.md) 里，发版时把「未发布」那一节
+归到新版本号下即可 —— 比翻 commit 记录方便得多。
 
 产物文件名默认是 `app-release.apk`，**传到 Release 时记得改名带上版本号**
 （如 `bubu-workbench-1.1.0.apk`），否则过两周就分不清哪个包是哪版了。

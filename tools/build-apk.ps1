@@ -41,13 +41,14 @@ $SDK_MIRROR = 'https://mirrors.cloud.tencent.com/AndroidSDK'
 # 刻意不用 sdkmanager：它的包源是 dl.google.com，国内实际下载速度为 0。
 # 改成从腾讯镜像直接取 zip。
 #
-# 文件名注意：镜像上 build-tools 35 以后用的是下划线（build-tools_r35_windows.zip），
+# 文件名注意：镜像上 build-tools 35 及以后用的是下划线（build-tools_r35_windows.zip），
 # 34 及以前是连字符（build-tools_r34-windows.zip），探测时容易搞错。
-# 下面钉的是 34.0.0，和 android/app/build.gradle 里的 buildToolsVersion 对应；
-# 要升到 35 就改这两处。
+#
+# 这里装的 build-tools 35.0.0 就是 AGP 8.7 的默认版本。
+# android/app/build.gradle 里没有钉 buildToolsVersion，两边保持一致。
 $SDK_PARTS = @(
   @{ File = 'platform-35_r02.zip';                Dest = 'platforms';   As = 'android-35'     },
-  @{ File = 'build-tools_r34-windows.zip';        Dest = 'build-tools'; As = '34.0.0'         },
+  @{ File = 'build-tools_r35_windows.zip';        Dest = 'build-tools'; As = '35.0.0'         },
   @{ File = 'platform-tools_r35.0.0-windows.zip'; Dest = '.';           As = 'platform-tools' }
 )
 
@@ -85,7 +86,21 @@ function Get-File([string]$url, [string]$outFile) {
 
 function Expand-Zip([string]$zip, [string]$dest) {
   New-Item -ItemType Directory -Force -Path $dest | Out-Null
-  [System.IO.Compression.ZipFile]::ExtractToDirectory($zip, $dest)
+  # 杀毒软件（Defender 等）会在刚解压出 exe 的瞬间扫描并短暂锁住文件，
+  # 这时 ExtractToDirectory 会抛 "being used by another process"。
+  # 这不是真错误，等一下重试即可。
+  for ($i = 1; $i -le 5; $i++) {
+    try {
+      [System.IO.Compression.ZipFile]::ExtractToDirectory($zip, $dest)
+      return
+    } catch {
+      if ($i -eq 5) { throw }
+      Write-Host "    解压被文件占用，第 $i 次重试 ..."
+      Start-Sleep -Seconds 3
+      Get-ChildItem -LiteralPath $dest -Force -ErrorAction SilentlyContinue |
+        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+    }
+  }
 }
 
 # ------------------------------------------------------------
@@ -175,6 +190,34 @@ if (-not (Test-Path (Join-Path $androidDir 'gradlew.bat'))) {
 $localProps = Join-Path $androidDir 'local.properties'
 $sdkForward = $sdkDir -replace '\\', '/'
 "sdk.dir=$sdkForward" | Set-Content -Path $localProps -Encoding ASCII
+
+# ------------------------------------------------------------
+#  生成 www\version.js（应用内「关于」那张卡片显示的版本号）
+#
+#  换算规则必须和 android\app\build.gradle 里那段保持一致，
+#  否则包内的 versionName 和界面显示的会对不上。
+# ------------------------------------------------------------
+$pkgVer = '1.0.0'
+try {
+  $pj = Get-Content -LiteralPath (Join-Path $root 'package.json') -Raw | ConvertFrom-Json
+  if ($pj.version) { $pkgVer = [string]$pj.version }
+} catch { }
+
+$parts = @(($pkgVer -split '-')[0] -split '\.' | ForEach-Object {
+  if ($_ -match '^\d+$') { [int]$_ } else { 0 }
+})
+while ($parts.Count -lt 3) { $parts += 0 }
+$buildNo = $parts[0] * 10000 + $parts[1] * 100 + $parts[2]
+
+$versionJs = @"
+/* 由 tools\build-apk.ps1 依据 package.json 自动生成，不要手改。
+   要改版本号请改 package.json 的 version 字段，然后重新编译。 */
+window.__BU_VERSION__ = { version: "$pkgVer", build: $buildNo };
+"@
+# 不带 BOM 写，避免个别环境把 BOM 当成脚本文本的一部分
+[System.IO.File]::WriteAllText(
+  (Join-Path $root 'www\version.js'), $versionJs, (New-Object System.Text.UTF8Encoding($false)))
+Write-Host "  已生成 www\version.js ：$pkgVer (build $buildNo)"
 
 Write-Step '同步网页资源'
 Push-Location $root

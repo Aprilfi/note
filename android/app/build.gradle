@@ -45,9 +45,8 @@ logger.lifecycle("[version] ${appVersionName} (versionCode ${appVersionCode})")
 android {
     namespace "com.bubu.workbench"
     compileSdk rootProject.ext.compileSdkVersion
-    // 国内镜像上只找得到 build-tools 34.0.0（35 的包 dl.google.com 下不动），
-    // 这里显式指定，避免 AGP 去找默认的 35.0.0 而报 "Failed to find Build Tools"
-    buildToolsVersion "34.0.0"
+    // 这里刻意不写 buildToolsVersion，让 AGP 用它自带的默认值（当前 35.0.0）。
+    // 钉死某个版本会导致 CI 或换机器时缺这个版本而失败。
 
     signingConfigs {
         release {
