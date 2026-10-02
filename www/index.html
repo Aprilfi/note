@@ -1180,7 +1180,7 @@ function renderWishList(){
   if(appState.wishCatFilter) arr=arr.filter(w=>w.category===appState.wishCatFilter);
 
   $("wishTopStats").innerHTML=`🐾 心愿清单共 <b>${arr.length}</b> 条 · <b>${groups.length}</b> 个分区<br>`+
-    `<span style="font-size:13px">（拖拽排序 / 跨分区归类正在调试，暂不可用）</span>`;
+    `<span style="font-size:13px">长按条目可以拖动：放到别的条目上下=排序，拖到别的分区=归类</span>`;
 
   const card=w=>`
 <div class="item-card" data-id="${w.id}" data-gid="${w.groupId}">
@@ -1202,7 +1202,7 @@ function renderWishList(){
   groups.forEach(g=>{
     const items=arr.filter(w=>w.groupId===g.id);
     html+=`
-<div class="wish-group">
+<div class="wish-group" data-gid="${g.id}">
   <div class="group-head" data-gid="${g.id}">
     <span class="group-grip">⋮⋮</span>
     <span class="group-title">${esc(g.title)}</span>
@@ -1326,6 +1326,21 @@ function enableSortable(container, kind){
     return null;
   };
 
+  /* 用手指的纵坐标找它落在哪个分区块里。
+     不去依赖 elementFromPoint 精确命中某个子元素 —— 分区块内部空隙多，
+     那样很难拖准，而且体验也差。整块都是拖放目标更好用。 */
+  function groupUnderY(clientY){
+    let best=null, bestD=Infinity;
+    container.querySelectorAll(".wish-group").forEach(g=>{
+      if(bestD===0) return;
+      const r=g.getBoundingClientRect();
+      if(clientY>=r.top && clientY<=r.bottom){ best=g; bestD=0; return; }
+      const d=Math.min(Math.abs(clientY-r.top), Math.abs(clientY-r.bottom));
+      if(d<bestD){ bestD=d; best=g; }
+    });
+    return best;
+  }
+
   function beginDrag(el,y){
     if(el.classList.contains("group-head")){ mode="group"; dragId=el.dataset.gid; }
     else if(el.classList.contains("item-card")){ mode="item"; dragId=el.dataset.id; }
@@ -1364,8 +1379,9 @@ function enableSortable(container, kind){
       target=findSel(under,"item-card");
       if(target===dragEl) target=null;
       if(!target){
-        const box=findSel(under,"group-items");
-        if(box){ target=box; isBox=true; }
+        /* 没落在某张卡片上，就看落在哪个分区里 —— 整块都能当拖放目标 */
+        const g=groupUnderY(t.clientY);
+        if(g && !g.contains(dragEl)){ target=g; isBox=true; }
       }
     }
 
@@ -1374,6 +1390,7 @@ function enableSortable(container, kind){
         x.classList.remove("ins-before","ins-after"));
       hoverEl=target;
     }
+
     if(!target || isBox) return;          // 落到分区容器上时不用画插入线
     const r=target.getBoundingClientRect();
     const before=t.clientY < r.top + r.height/2;
@@ -1408,7 +1425,7 @@ function enableSortable(container, kind){
       const fromIdx=arr.findIndex(x=>x.id===id);
       if(fromIdx<0) return;
       const moved=arr.splice(fromIdx,1)[0];
-      if(target.classList.contains("group-items")){
+      if(target.classList.contains("wish-group") || target.classList.contains("group-items")){
         moved.groupId=target.dataset.gid;
         arr.push(moved);
       }else{
