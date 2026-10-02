@@ -269,12 +269,12 @@ body{
     <div class="sub-tab-wrap">
       <button class="sub-tab active" data-wsub="cool">🐾 心愿清单</button>
       <button class="sub-tab" data-wsub="future">🌙 未来清单</button>
-      <button class="sub-tab" data-wsub="add">➕ 新增心愿</button>
     </div>
 
     <div id="wish-cool">
       <div class="stats-hint" id="wishTopStats"></div>
-      <div class="filter-bar">
+      <button class="btn-add btn-wide" id="addWishBtn">➕ 新增心愿</button>
+      <div class="filter-bar" style="margin-top:10px">
         <select id="wishCategoryFilter">
           <option value="">全部物品分类</option>
           <option value="beautiful">美丽美妆</option>
@@ -285,8 +285,7 @@ body{
         </select>
         <select id="wishSortSel">
           <option value="ct">创建时间（最新在前）</option>
-          <option value="budget-desc">价格（从高到低）</option>
-          <option value="budget-asc">价格（从低到高）</option>
+          <option value="ct-asc">创建时间（最早在前）</option>
         </select>
       </div>
       <div id="wishListContainer"></div>
@@ -296,50 +295,6 @@ body{
       <div class="stats-hint" id="futureTopStats"></div>
       <button class="btn-add" id="addFutureBtn">➕ 添加未来大件</button>
       <div id="futureListContainer" style="margin-top:12px"></div>
-    </div>
-
-    <div id="wish-add" style="display:none">
-      <div class="card">
-        <h2>✨ 新增心愿</h2>
-        <div class="form-row">
-          <label>心愿名称</label>
-          <input id="wishName" placeholder="想买的东西">
-        </div>
-        <div class="form-row">
-          <label>价格（元）</label>
-          <input type="number" id="wishBudget" placeholder="0">
-        </div>
-        <details class="adv">
-          <summary>高级设置：分类｜欲望｜预判风险｜备注</summary>
-          <div class="form-row">
-            <label>物品分类</label>
-            <select id="wishCategory">
-              <option value="beautiful">美丽美妆</option>
-              <option value="efficiency">效率工具</option>
-              <option value="comfort">居家舒适</option>
-              <option value="food">吃喝零食</option>
-              <option value="other">其他</option>
-            </select>
-          </div>
-          <div class="form-row">
-            <label>欲望程度</label>
-            <select id="wishDesire">
-              <option value="low">低欲望</option>
-              <option value="mid">中等欲望</option>
-              <option value="high">强烈想要（警惕冲动）</option>
-            </select>
-          </div>
-          <div class="form-row">
-            <label>预判风险（下单后会带进购入复盘）</label>
-            <textarea id="wishDefectNote" placeholder="会不会闲置？有没有替代品？是不是一时上头？"></textarea>
-          </div>
-          <div class="form-row">
-            <label>备注（为什么想买）</label>
-            <textarea id="wishNote" placeholder="冲动还是刚需？随手记一记"></textarea>
-          </div>
-        </details>
-        <button class="btn-add btn-wide" id="addWishBtn">✅ 保存这条心愿</button>
-      </div>
     </div>
   </div>
 
@@ -439,11 +394,15 @@ body{
 
 <div class="modal-overlay" id="wishEditModal">
 <div class="modal">
-  <h2>✏️ 编辑心愿</h2>
+  <h2 id="wishModalTitle">✨ 新增心愿</h2>
   <input type="hidden" id="editWishId">
   <div class="form-row">
     <label>心愿名称</label>
-    <input id="editWishName">
+    <input id="editWishName" placeholder="想买的东西">
+  </div>
+  <div class="form-row">
+    <label>规格（选填）</label>
+    <input id="editWishSpec" placeholder="型号 / 容量 / 颜色，用来区分同类里的不同款">
   </div>
   <div class="form-row">
     <label>物品分类</label>
@@ -456,27 +415,15 @@ body{
     </select>
   </div>
   <div class="form-row">
-    <label>价格（元）</label>
-    <input type="number" id="editWishBudget">
+    <label>预判风险（下单后会带进购入复盘）</label>
+    <textarea id="editWishDefectNote" placeholder="会不会闲置？有没有替代品？是不是一时上头？"></textarea>
   </div>
   <div class="form-row">
-    <label>欲望等级</label>
-    <select id="editWishDesire">
-      <option value="low">低欲望</option>
-      <option value="mid">中等欲望</option>
-      <option value="high">强烈想要</option>
-    </select>
+    <label>备注（为什么想买）</label>
+    <textarea id="editWishNote" placeholder="冲动还是刚需？随手记一记"></textarea>
   </div>
-  <div class="form-row">
-    <label>预判风险</label>
-    <textarea id="editWishDefectNote"></textarea>
-  </div>
-  <div class="form-row">
-    <label>备注</label>
-    <textarea id="editWishNote"></textarea>
-  </div>
-  <button class="btn-add" id="saveEditWishBtn">保存修改</button>
-  <button class="btn-edit" id="closeEditWishBtn">关闭</button>
+  <button class="btn-add" id="saveEditWishBtn">保存</button>
+  <button class="btn-edit" id="closeEditWishBtn">取消</button>
 </div>
 </div>
 
@@ -912,7 +859,6 @@ function getPurchases(){return loadJSON(K.purchases,[]);}
 function savePurchases(a){saveJSON(K.purchases,a);}
 function getFutures(){return loadJSON(K.futures,[]);}
 function saveFutures(a){saveJSON(K.futures,a);}
-function wishPrice(w){return Number(w.price!=null?w.price:w.budget)||0;}
 function priceBand(v){
   const n=Number(v)||0;
   if(n<=30) return {cls:"band-1",label:"0-30元"};
@@ -963,22 +909,18 @@ function renderWishList(){
   if(appState.wishCatFilter) arr=arr.filter(w=>w.category===appState.wishCatFilter);
   const sortKey=$("wishSortSel").value||appState.wishSort;
   appState.wishSort=sortKey;
-  if(sortKey==="budget-desc") arr.sort((a,b)=>wishPrice(b)-wishPrice(a));
-  else if(sortKey==="budget-asc") arr.sort((a,b)=>wishPrice(a)-wishPrice(b));
+  if(sortKey==="ct-asc") arr.sort((a,b)=>Date.parse(a.createdAt)-Date.parse(b.createdAt));
   else arr.sort((a,b)=>Date.parse(b.createdAt)-Date.parse(a.createdAt));
 
-  const total=arr.reduce((s,w)=>s+wishPrice(w),0);
-  $("wishTopStats").innerHTML=`🐾 心愿清单共 <b>${arr.length}</b> 条 · 合计价格 <b>${money(total)}</b> 元`;
+  $("wishTopStats").innerHTML=`🐾 心愿清单共 <b>${arr.length}</b> 条`;
   let html="";
   arr.forEach(w=>{
-    const band=priceBand(wishPrice(w));
     html+=`
 <div class="item-card">
   <div><span class="item-title">${CAT_ICON[w.category]||"🎀"} ${esc(w.name)}</span></div>
   <div style="margin-top:6px">
-    <span class="price-band ${band.cls}">价格 ${money(wishPrice(w))}元（${band.label}）</span>
     <span class="tag">${CAT_MAP[w.category]||"其他"}</span>
-    <span class="tag">${w.desire==="high"?"强烈想要":w.desire==="mid"?"中等欲望":"低欲望"}</span>
+    ${w.spec?`<span class="tag">规格：${esc(w.spec)}</span>`:""}
   </div>
   <div class="item-note">备注：${esc(w.note)||"无"}</div>
   ${w.defectNote?`<div class="item-note warn">⚠️ 预判风险：${esc(w.defectNote)}</div>`:""}
@@ -989,9 +931,9 @@ function renderWishList(){
   </div>
 </div>`;
   });
-  if(arr.length===0) html='<div class="card" style="text-align:center;color:#9a7386">暂无心愿记录，点【➕ 新增心愿】记一笔吧～</div>';
+  if(arr.length===0) html='<div class="card" style="text-align:center;color:#9a7386">暂无心愿记录，点上面的【➕ 新增心愿】记一笔吧～</div>';
   container.innerHTML=html;
-  container.querySelectorAll(".edit-wish-btn").forEach(btn=>btn.onclick=()=>openEditWish(btn.dataset.id));
+  container.querySelectorAll(".edit-wish-btn").forEach(btn=>btn.onclick=()=>openWishModal(btn.dataset.id));
   container.querySelectorAll(".buy-wish-btn").forEach(btn=>btn.onclick=()=>openBuyModal("wish",btn.dataset.id));
   container.querySelectorAll(".del-wish-btn").forEach(btn=>btn.onclick=async()=>{
     const item=getWishes().find(x=>x.id===btn.dataset.id);
@@ -1046,55 +988,51 @@ function renderFutureList(){
   });
 }
 
-/* ---------- 新增 / 编辑心愿 ---------- */
-function addWish(){
-  const name=$("wishName").value.trim();
-  if(!name){alert("请填写心愿名称");return;}
-  const list=getWishes();
-  list.push({
-    id:uid("wish"),
-    name:name,
-    category:$("wishCategory").value,
-    price:Number($("wishBudget").value)||0,
-    desire:$("wishDesire").value,
-    note:$("wishNote").value.trim(),
-    defectNote:$("wishDefectNote").value.trim(),
-    createdAt:new Date().toISOString()
-  });
-  saveWishes(list);
-  $("wishName").value="";$("wishBudget").value="";
-  $("wishCategory").value="other";$("wishDesire").value="low";
-  $("wishNote").value="";$("wishDefectNote").value="";
-  alert("心愿已保存！");
-  switchWishSub("cool");
-}
-function openEditWish(id){
-  const w=getWishes().find(x=>x.id===id);
-  if(!w) return;
-  $("editWishId").value=w.id;
-  $("editWishName").value=w.name;
-  $("editWishCategory").value=w.category||"other";
-  $("editWishBudget").value=wishPrice(w);
-  $("editWishDesire").value=w.desire||"low";
-  $("editWishDefectNote").value=w.defectNote||"";
-  $("editWishNote").value=w.note||"";
+/* ---------- 新增 / 编辑心愿：共用一个弹窗 ----------
+   传 id 就是编辑，传 null/空就是新增。
+   以前"新增"占一个独立子标签、字段还和编辑各写一套，现在合并成一份表单。 */
+function openWishModal(id){
+  const w=id?getWishes().find(x=>x.id===id):null;
+  $("wishModalTitle").innerText = w ? "✏️ 编辑心愿" : "✨ 新增心愿";
+  $("editWishId").value        = w ? w.id : "";
+  $("editWishName").value      = w ? w.name : "";
+  $("editWishSpec").value      = w ? (w.spec||"") : "";
+  $("editWishCategory").value  = (w && w.category) || "other";
+  $("editWishDefectNote").value= w ? (w.defectNote||"") : "";
+  $("editWishNote").value      = w ? (w.note||"") : "";
+  $("saveEditWishBtn").innerText = w ? "保存修改" : "保存";
   $("wishEditModal").style.display="flex";
+  /* 刻意不自动聚焦：安卓上会立刻弹出键盘，把下半截表单和保存按钮全挡住，
+     反而要多一次收键盘的操作。让用户自己点第一个输入框。 */
 }
-function saveEditWish(){
-  const id=$("editWishId").value;
-  const arr=getWishes();
-  const idx=arr.findIndex(x=>x.id===id);
-  if(idx<0) return;
+
+function saveWishModal(){
   const name=$("editWishName").value.trim();
   if(!name){alert("请填写心愿名称");return;}
-  arr[idx].name=name;
-  arr[idx].category=$("editWishCategory").value;
-  arr[idx].price=Number($("editWishBudget").value)||0;
-  arr[idx].desire=$("editWishDesire").value;
-  arr[idx].defectNote=$("editWishDefectNote").value.trim();
-  arr[idx].note=$("editWishNote").value.trim();
+
+  const fields={
+    name:name,
+    spec:$("editWishSpec").value.trim(),
+    category:$("editWishCategory").value,
+    defectNote:$("editWishDefectNote").value.trim(),
+    note:$("editWishNote").value.trim()
+  };
+
+  const id=$("editWishId").value;
+  const arr=getWishes();
+
+  if(id){
+    const idx=arr.findIndex(x=>x.id===id);
+    if(idx<0){alert("这条心愿已经不在了");return;}
+    // 只覆盖表单里的字段，不动记录上其它历史字段
+    Object.assign(arr[idx],fields);
+  }else{
+    arr.push(Object.assign({id:uid("wish"),createdAt:new Date().toISOString()},fields));
+  }
+
   saveWishes(arr);
   $("wishEditModal").style.display="none";
+  switchWishSub("cool");
   renderWishList();
 }
 
@@ -1142,14 +1080,20 @@ function openBuyModal(sourceType,id){
   const isWish=(sourceType==="wish");
   const item=isWish?getWishes().find(w=>w.id===id):getFutures().find(f=>f.id===id);
   if(!item) return;
-  const base=isWish?wishPrice(item):(Number(item.targetPrice)||0);
+  const base=isWish?0:(Number(item.targetPrice)||0);
   $("buySourceType").value=sourceType;
   $("buySourceId").value=id;
   $("buyItemName").innerText=item.name;
-  $("buyBaseHint").innerText=`原价格 ${money(base)} 元，不修改价格就直接按它自动转移。`;
   const priceInput=$("buyActualPrice");
   priceInput.value="";
-  priceInput.placeholder=`留空＝按 ${money(base)} 元转入复盘`;
+  if(isWish){
+    // 心愿已经不记价格了，实际花了多少要在这里填
+    $("buyBaseHint").innerText="心愿不记价格，这里填实际花掉的钱。";
+    priceInput.placeholder="填写实际价格";
+  }else{
+    $("buyBaseHint").innerText=`原价格 ${money(base)} 元，不修改价格就直接按它自动转移。`;
+    priceInput.placeholder=`留空＝按 ${money(base)} 元转入复盘`;
+  }
   $("buyCategory").value=item.category||"other";
   $("buyModal").style.display="flex";
 }
@@ -1159,12 +1103,15 @@ function confirmBuy(){
   const isWish=(sourceType==="wish");
   const item=isWish?getWishes().find(w=>w.id===sourceId):getFutures().find(f=>f.id===sourceId);
   if(!item){alert("记录不存在，请重新打开");return;}
-  const base=isWish?wishPrice(item):(Number(item.targetPrice)||0);
+  const base=isWish?0:(Number(item.targetPrice)||0);
   const raw=$("buyActualPrice").value.trim();
   let price=base;
   if(raw!==""){
     if(isNaN(Number(raw))){alert("价格请填写数字");return;}
     price=Number(raw);
+  }else if(isWish){
+    alert("请填写实际价格");
+    return;
   }
   const list=getPurchases();
   list.push({
@@ -1525,7 +1472,6 @@ function switchWishSub(sub){
   document.querySelectorAll(".sub-tab[data-wsub]").forEach(b=>b.classList.toggle("active",b.dataset.wsub===sub));
   $("wish-cool").style.display=(sub==="cool")?"block":"none";
   $("wish-future").style.display=(sub==="future")?"block":"none";
-  $("wish-add").style.display=(sub==="add")?"block":"none";
   if(sub==="cool") renderWishList();
   if(sub==="future") renderFutureList();
 }
@@ -1564,8 +1510,8 @@ function bindEvents(){
   $("btn-save-inspire").onclick=addInspire;
   $("socialTopToggle").onclick=toggleSocialTop;
 
-  $("addWishBtn").onclick=addWish;
-  $("saveEditWishBtn").onclick=saveEditWish;
+  $("addWishBtn").onclick=()=>openWishModal(null);
+  $("saveEditWishBtn").onclick=saveWishModal;
   $("closeEditWishBtn").onclick=()=>$("wishEditModal").style.display="none";
   $("addFutureBtn").onclick=()=>openFutureModal(null);
   $("saveFutureBtn").onclick=saveFuture;
