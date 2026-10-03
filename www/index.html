@@ -66,6 +66,12 @@ body.custom-bg{background-image:none;background-size:cover;background-position:c
 .head-row h2{margin-bottom:0}
 .task-cmt{margin-top:10px}
 .cmt-box{margin-top:8px;border-top:1px dashed #f2c8dc;padding-top:8px}
+/* 留言 / 灵感下面挂的子评论。特意不用 .comment-item：
+   那个类被"长按拖拽"的绑定当成可拖条目，嵌套会互相抢事件。 */
+.sub-cmt{padding:8px 0;border-bottom:1px dashed #f6dcea}
+.sub-cmt:last-child{border-bottom:none}
+.sub-cmt-row{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.sub-cmt-row>span{white-space:pre-line;font-size:14px}
 
 h2{margin-bottom:14px;color:#b04075;font-size:19px}
 h3{margin:16px 0 10px;color:#b04075;font-size:16px}
@@ -646,6 +652,72 @@ const PLAN_META={
   hl:{key:"health",todo:"hl-list",finish:"hl-finish-list",apple:"hl-apple"}
 };
 const openTaskComments={};
+/* 「留言」每条下面挂的评论，展开状态按 条目id 记在内存里。
+   和任务评论是两套数据：任务评论存在任务对象上，这里存在留言对象上。 */
+const openMsgComments={};
+const CMT_SRC={
+  hl:{list:()=>data.msg.health, top:()=>data.msg.healthTop}
+};
+function cmtArrOf(kind,isTop){
+  const m=CMT_SRC[kind];
+  if(!m) return [];
+  return isTop?m.top():m.list();
+}
+function cmtItemOf(kind,isTop,id){return cmtArrOf(kind,isTop).find(x=>String(x.id)===String(id));}
+function cmtRerender(kind){ renderPlanMsg(kind); }
+
+/* 渲染"评论"按钮 + 展开后的列表 / 输入框 */
+function msgCmtBlock(kind,isTop,m){
+  const key=kind+"|"+(isTop?1:0)+"|"+m.id;
+  const list=m.comments||[];
+  let inner="";
+  if(openMsgComments[key]){
+    list.forEach(c=>{
+      inner+=`
+      <div class="sub-cmt">
+        <div class="sub-cmt-row">
+          <span>${esc(c.text)}</span>
+          <button class="btn-del" onclick="delMsgComment('${kind}',${isTop},${m.id},${c.id})">删除</button>
+        </div>
+        <div class="comment-time">${getTimeText(c.time)}</div>
+      </div>`;
+    });
+    inner+=`
+    <div class="input-row" style="margin-top:8px">
+      <input id="${kind}-cmt-${isTop?1:0}-${m.id}" placeholder="写下这条的评论…">
+      <button class="btn-add" onclick="addMsgComment('${kind}',${isTop},${m.id})">发表</button>
+    </div>`;
+  }
+  return `
+  <div class="task-cmt">
+    <button class="btn-edit" onclick="toggleMsgComment('${kind}',${isTop},${m.id})">💬 评论${list.length?"（"+list.length+"）":""}</button>
+    ${openMsgComments[key]?`<div class="cmt-box">${inner}</div>`:""}
+  </div>`;
+}
+function toggleMsgComment(kind,isTop,id){
+  const key=kind+"|"+(isTop?1:0)+"|"+id;
+  openMsgComments[key]=!openMsgComments[key];
+  cmtRerender(kind);
+}
+function addMsgComment(kind,isTop,id){
+  const el=$(`${kind}-cmt-${isTop?1:0}-${id}`);
+  const val=el?el.value.trim():"";
+  if(!val) return;
+  const m=cmtItemOf(kind,isTop,id);
+  if(!m) return;
+  if(!Array.isArray(m.comments)) m.comments=[];
+  m.comments.push({id:Date.now(),text:val,time:Date.now()});
+  openMsgComments[kind+"|"+(isTop?1:0)+"|"+id]=true;
+  savePlan();
+  cmtRerender(kind);
+}
+function delMsgComment(kind,isTop,id,cid){
+  const m=cmtItemOf(kind,isTop,id);
+  if(!m||!Array.isArray(m.comments)) return;
+  m.comments=m.comments.filter(c=>String(c.id)!==String(cid));
+  savePlan();
+  cmtRerender(kind);
+}
 function getTimeText(timestamp){
   if(!timestamp) return "无记录";
   const now=Date.now();
@@ -798,6 +870,7 @@ function renderPlanMsg(kind){
         </div>
       </div>
       <div class="comment-time">${getTimeText(m.time)}</div>
+      ${msgCmtBlock(kind,false,m)}
     </div>`;
   });
   data.msg[meta.top].forEach(m=>{
@@ -811,6 +884,7 @@ function renderPlanMsg(kind){
         </div>
       </div>
       <div class="comment-time">${getTimeText(m.time)}</div>
+      ${msgCmtBlock(kind,true,m)}
     </div>`;
   });
   bindCommentDrag(msgList, meta.list, ()=>renderPlanMsg(kind));
@@ -996,6 +1070,8 @@ function bindCommentDrag(container, key, rerender){
   container.addEventListener("touchstart", e=>{
     if(e.touches.length!==1) return;
     const t=e.touches[0];
+    /* 展开的评论区里要输入文字、点按钮，长按那里不该把整条留言拖走 */
+    if(e.target.closest && e.target.closest(".cmt-box")) return;
     const item=findItem(e.target);
     if(!item || !item.dataset.cid) return;
     clearTimers();
