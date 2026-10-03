@@ -98,6 +98,12 @@ button{border:none;border-radius:12px;padding:9px 12px;cursor:pointer;font-weigh
 /* ---------- 任务 / 列表 ---------- */
 .task-item{padding:14px;border:1px solid #f4d7e6;border-radius:16px;margin:8px 0;background:#fff9fc}
 .task-item.finished{text-decoration:line-through;color:#999;background:#fcf0f6}
+/* 任务条目也要关掉长按选词，否则长按会被 WebView 当成选词、拖不起来
+   （和评论 / 心愿条目一样的坑） */
+.task-item{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.task-item.dragging{opacity:.28}
+.task-item.ins-before{box-shadow:0 -3px 0 #e878a2}
+.task-item.ins-after{box-shadow:0 3px 0 #e878a2}
 .task-count{color:#d05088;font-weight:bold}
 .task-expire{color:#ff4444;font-weight:bold}
 .task-time{font-size:12.5px;color:#888;margin-top:4px}
@@ -264,6 +270,7 @@ body{
           <button class="btn-add" id="btn-add-hl">添加任务</button>
         </div>
         <h2>📋 任务列表</h2>
+        <div class="item-note" style="margin:0 0 8px">长按任务可以拖动排序</div>
         <div id="hl-list"></div>
         <h2>✅ 通关任务</h2>
         <div id="hl-finish-list"></div>
@@ -781,7 +788,7 @@ function renderPlanTasks(kind){
   listDom.innerHTML="";
   todo.forEach(t=>{
     listDom.innerHTML+=`
-    <div class="task-item">
+    <div class="task-item" data-cid="${t.id}">
       <div>${esc(t.name)} <span class="task-count">完成次数：${t.count}</span></div>
       <div class="task-time">发布时间：${getTimeText(t.createTime)}</div>
       <div class="task-actions">
@@ -796,7 +803,7 @@ function renderPlanTasks(kind){
   finishDom.innerHTML="";
   done.forEach(t=>{
     finishDom.innerHTML+=`
-    <div class="task-item finished">
+    <div class="task-item finished" data-cid="${t.id}">
       <div>${esc(t.name)} <span class="task-count">完成次数：${t.count}</span></div>
       <div class="task-time">发布时间：${getTimeText(t.createTime)}</div>
       <div class="task-actions">
@@ -806,6 +813,9 @@ function renderPlanTasks(kind){
     </div>`;
   });
   appleDom.innerHTML="🍎".repeat(done.length);
+  /* 长按任务条目可以拖动排序（进行中 / 通关两个列表都支持） */
+  bindTaskDrag(listDom,kind);
+  bindTaskDrag(finishDom,kind);
 }
 /* 每条任务下面的评论 */
 function toggleTaskComment(kind,id){
@@ -921,15 +931,18 @@ function delPlanMsg(kind,isTop,id){
 }
 
 /* ============================================================
-   评论拖拽：长按拾起 → 跟手移动 → 松手落下
+   通用拖拽排序：长按拾起 → 跟手移动 → 松手落下
    ------------------------------------------------------------
    安卓 WebView 里 HTML5 的 draggable / dragover / drop 只在鼠标下有效，
    触摸屏根本不触发，所以只能自己用 touch 事件实现。
+   评论 / 留言、健康任务列表都用这一份实现，差别只在参数：
 
-   拖拽过程中有两种落点，靠"有没有停住"区分：
-     拖到某条的上/下半边        → 插到它前面/后面（排序）
-     在它上面停住 600ms 不动    → 切换成"合并"，两条评论并成一条
-   停住这个动作是有意设计的：如果单纯靠位置判断，排序和合并会互相打架，
+     container   绑在哪个容器上（容器本身不会被重建，只绑一次）
+     selector    可拖条目的类名：comment-item / task-item
+     getArray()  条目所在的数组，顺序会被就地修改
+     merge       true 时支持"停住不动 = 合并"（只有评论用得上）
+
+   合并那套是有意用"停住"触发的：如果单纯靠位置判断，排序和合并会互相打架，
    用户没法表达"我要插到这条前面"还是"我要和这条合并"。
    ============================================================ */
 const DRAG_LONG_PRESS = 400;   // 按多久算"拾起"
@@ -948,9 +961,12 @@ function mergeComments(arr, fromIdx, intoIdx){
   arr.splice(arr.indexOf(other), 1);
 }
 
-function bindCommentDrag(container, key, rerender){
-  if(!container || container.__dragBound) return;   // 容器不会被重建，绑一次就够
-  container.__dragBound = true;
+function bindTouchSort(opts){
+  const container=opts.container;
+  if(!container || container.__sortBound) return;   // 容器不会被重建，绑一次就够
+  container.__sortBound = true;
+  const SEL=opts.selector;
+  const canMerge=!!opts.merge;
 
   let pressTimer=null, dwellTimer=null;
   let dragEl=null, ghost=null, dragId=null;
@@ -962,12 +978,17 @@ function bindCommentDrag(container, key, rerender){
     if(dwellTimer){clearTimeout(dwellTimer);dwellTimer=null;}
   };
   const clearMarks=()=>{
-    container.querySelectorAll(".comment-item").forEach(x=>
+    container.querySelectorAll("."+SEL).forEach(x=>
       x.classList.remove("ins-before","ins-after","merge-target","dragging"));
+  };
+  /* 换拖放目标时用：只擦插入线和合并高亮，保留被拖那条的 dragging 样式 */
+  const clearTargetMarks=()=>{
+    container.querySelectorAll("."+SEL).forEach(x=>
+      x.classList.remove("ins-before","ins-after","merge-target"));
   };
   const findItem=node=>{
     while(node && node!==container){
-      if(node.classList && node.classList.contains("comment-item")) return node;
+      if(node.classList && node.classList.contains(SEL)) return node;
       node=node.parentNode;
     }
     return null;
@@ -987,10 +1008,10 @@ function bindCommentDrag(container, key, rerender){
     ghost.style.left=r.left+"px";
     ghost.style.top=r.top+"px";
     ghost.style.width=r.width+"px";
-    /* 提示条：让人知道拖拽能干什么，以及"停住"会变成合并 */
+    /* 提示条：让人知道拖拽能干什么 */
     const hint=document.createElement("span");
     hint.className="drag-hint";
-    hint.textContent="上半/下半 = 排序　·　停住不动 = 合并";
+    hint.textContent=opts.hint||"上半/下半 = 排序";
     ghost.appendChild(hint);
     document.body.appendChild(ghost);
 
@@ -1020,8 +1041,7 @@ function bindCommentDrag(container, key, rerender){
 
     /* 换目标了：清掉旧标记，重新计时 */
     clearTimers();
-    container.querySelectorAll(".comment-item").forEach(x=>
-      x.classList.remove("ins-before","ins-after","merge-target"));
+    clearTargetMarks();
     if(ghost) ghost.classList.remove("merging");
     hoverEl=valid; mode=null;
 
@@ -1030,6 +1050,7 @@ function bindCommentDrag(container, key, rerender){
     const r=valid.getBoundingClientRect();
     valid.classList.add(t.clientY < r.top + r.height/2 ? "ins-before" : "ins-after");
     mode="insert";
+    if(!canMerge) return;      // 只排序的列表不用等"停住"那一下
     dwellTimer=setTimeout(()=>{
       if(!ghost || hoverEl!==valid) return;
       valid.classList.remove("ins-before","ins-after");
@@ -1056,7 +1077,7 @@ function bindCommentDrag(container, key, rerender){
 
     if(!fromId || !target || !m) return;
     const targetId=target.dataset.cid;
-    const arr=data.msg[key];
+    const arr=opts.getArray();
     const fromIdx=arr.findIndex(x=>String(x.id)===String(fromId));
     if(fromIdx<0) return;
 
@@ -1077,8 +1098,8 @@ function bindCommentDrag(container, key, rerender){
   container.addEventListener("touchstart", e=>{
     if(e.touches.length!==1) return;
     const t=e.touches[0];
-    /* 展开的评论区里要输入文字、点按钮，长按那里不该把整条留言拖走 */
-    if(e.target.closest && e.target.closest(".cmt-box")) return;
+    /* 按钮和展开的评论区都要正常点，长按那里不该把整条拖走 */
+    if(e.target.closest && e.target.closest("button,.cmt-box")) return;
     const item=findItem(e.target);
     if(!item || !item.dataset.cid) return;
     clearTimers();
@@ -1099,6 +1120,29 @@ function bindCommentDrag(container, key, rerender){
   container.addEventListener("touchend", ()=>{
     if(pressTimer){clearTimeout(pressTimer); pressTimer=null;}
   }, {passive:true});
+}
+
+/* 评论 / 留言列表：排序 + 停住合并 */
+function bindCommentDrag(container, key, rerender){
+  bindTouchSort({
+    container: container,
+    selector:  "comment-item",
+    getArray:  ()=>data.msg[key],
+    rerender:  rerender,
+    merge:     true,
+    hint:      "上半/下半 = 排序　·　停住不动 = 合并"
+  });
+}
+
+/* 健康任务列表：只排序（没开合并，所以不用等那 600ms） */
+function bindTaskDrag(container, kind){
+  bindTouchSort({
+    container: container,
+    selector:  "task-item",
+    getArray:  ()=>data[PLAN_META[kind].key],
+    rerender:  ()=>renderPlanTasks(kind),
+    hint:      "放到别的任务上下 = 排序"
+  });
 }
 
 /* 社会化：瞬间&留言（每条下面可以再挂评论） */
