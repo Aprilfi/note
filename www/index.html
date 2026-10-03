@@ -281,8 +281,8 @@ body{
         <div id="social-top-list"></div>
       </div>
       <div class="card fragment">
-        <h2>💫 瞬间&灵感</h2>
-        <input type="text" id="social-inspire-input" placeholder="一句话灵感">
+        <h2>💫 瞬间&留言</h2>
+        <input type="text" id="social-inspire-input" placeholder="一句话留言">
         <div class="input-row" style="margin-top:8px;">
           <select id="social-inspire-tag">
             <option value="🫧平静">🫧平静</option>
@@ -295,18 +295,8 @@ body{
         </div>
         <div id="social-inspire-list"></div>
       </div>
-
-      <!-- 独立于"瞬间&灵感"的一套评论，和健康那边同款 -->
-      <div class="card fragment">
-        <h2>🪶 碎片留言</h2>
-        <textarea id="social-cmt-input" placeholder="随手记一句"></textarea>
-        <button class="btn-add" id="btn-add-msg-social" style="margin-top:10px">新增留言</button>
-        <div id="social-cmt-list"></div>
-      </div>
-      <div class="card highlight">
-        <h2>⭐ 精华留言</h2>
-        <div id="social-cmt-top-list"></div>
-      </div>
+      <!-- 原先的「碎片留言 / 精华留言」已下线，旧数据仍留在本机存储里，
+           导出的备份也照旧带着它们，只是界面不再展示。 -->
       </div>
     </div>
   </div>
@@ -652,11 +642,12 @@ const PLAN_META={
   hl:{key:"health",todo:"hl-list",finish:"hl-finish-list",apple:"hl-apple"}
 };
 const openTaskComments={};
-/* 「留言」每条下面挂的评论，展开状态按 条目id 记在内存里。
+/* 「留言 / 瞬间&留言」每条下面挂的评论，展开状态按 条目id 记在内存里。
    和任务评论是两套数据：任务评论存在任务对象上，这里存在留言对象上。 */
 const openMsgComments={};
 const CMT_SRC={
-  hl:{list:()=>data.msg.health, top:()=>data.msg.healthTop}
+  hl:     {list:()=>data.msg.health,        top:()=>data.msg.healthTop},
+  inspire:{list:()=>data.msg.socialInspire, top:()=>data.msg.socialTop}
 };
 function cmtArrOf(kind,isTop){
   const m=CMT_SRC[kind];
@@ -664,9 +655,9 @@ function cmtArrOf(kind,isTop){
   return isTop?m.top():m.list();
 }
 function cmtItemOf(kind,isTop,id){return cmtArrOf(kind,isTop).find(x=>String(x.id)===String(id));}
-function cmtRerender(kind){ renderPlanMsg(kind); }
+function cmtRerender(kind){ if(kind==="inspire") renderSocial(); else renderPlanMsg(kind); }
 
-/* 渲染"评论"按钮 + 展开后的列表 / 输入框 */
+/* 渲染"评论"按钮 + 展开后的列表 / 输入框。健康留言和瞬间&留言共用这一套。 */
 function msgCmtBlock(kind,isTop,m){
   const key=kind+"|"+(isTop?1:0)+"|"+m.id;
   const list=m.comments||[];
@@ -842,10 +833,9 @@ function planEdit(kind,id){
   if(newName&&newName.trim()){t.name=newName.trim();savePlan();renderPlanTasks(kind);}
 }
 
-/* 留言：健康 / 社会化 通用（考公已下线） */
+/* 留言：健康专用（考公、社会化的"碎片留言"都已下线，老数据保留在存储里） */
 const MSG_META={
-  hl:{list:"health",top:"healthTop",input:"hl-msg-input",listDom:"hl-msg-list",topDom:"hl-top-list"},
-  social:{list:"socialMsg",top:"socialMsgTop",input:"social-cmt-input",listDom:"social-cmt-list",topDom:"social-cmt-top-list"}
+  hl:{list:"health",top:"healthTop",input:"hl-msg-input",listDom:"hl-msg-list",topDom:"hl-top-list"}
 };
 function addPlanMsg(kind){
   const meta=MSG_META[kind];
@@ -1094,7 +1084,7 @@ function bindCommentDrag(container, key, rerender){
   }, {passive:true});
 }
 
-/* 社会化：瞬间&灵感 */
+/* 社会化：瞬间&留言（每条下面可以再挂评论） */
 function addInspire(){
   const text=$("social-inspire-input").value.trim();
   if(!text) return;
@@ -1116,6 +1106,7 @@ function renderSocial(){
           <button class="btn-del" onclick="delInspire(${item.id})">删除</button>
         </div>
       </div>
+      ${msgCmtBlock("inspire",false,item)}
     </div>`;
   });
   data.msg.socialTop.forEach(item=>{
@@ -1129,6 +1120,7 @@ function renderSocial(){
           <button class="btn-del" onclick="delInspireTop(${item.id})">删除</button>
         </div>
       </div>
+      ${msgCmtBlock("inspire",true,item)}
     </div>`;
   });
   /* 精华收藏多的时候自动收起，点按钮展开 */
@@ -2003,7 +1995,7 @@ function renderPlanStat(){
 <div class="stat-card"><div class="num">${hlMsg}</div><div class="cap">健康留言</div></div>
 <div class="stat-card"><div class="num">${scMsg}</div><div class="cap">社会化留言</div></div>
 <div class="stat-card"><div class="num">${data.msg.socialMsgTop.length}</div><div class="cap">社会化精华留言</div></div>
-<div class="stat-card"><div class="num">${data.msg.socialInspire.length}</div><div class="cap">瞬间&灵感</div></div>
+<div class="stat-card"><div class="num">${data.msg.socialInspire.length}</div><div class="cap">瞬间&留言</div></div>
 <div class="stat-card"><div class="num">${data.msg.socialTop.length}</div><div class="cap">精华收藏</div></div>`;
 }
 function renderWishStat(){
@@ -2159,7 +2151,7 @@ function switchPage(pageId){
   window.scrollTo({top:0,behavior:"smooth"});
 }
 function refreshPage(pageId){
-  if(pageId==="plan"){renderPlanTasks("hl");renderPlanMsg("hl");renderPlanMsg("social");renderSocial();}
+  if(pageId==="plan"){renderPlanTasks("hl");renderPlanMsg("hl");renderSocial();}
   else if(pageId==="wish"){renderWishListPage();}
   else if(pageId==="review"){renderReviewPage();}
   else if(pageId==="setting"){renderSetting();}
@@ -2187,7 +2179,7 @@ function switchWishSub(sub){
 }
 function renderAll(){
   renderPlanTasks("hl");
-  renderPlanMsg("hl");renderPlanMsg("social");renderSocial();
+  renderPlanMsg("hl");renderSocial();
   renderWishList();renderFutureList();
 }
 
@@ -2216,7 +2208,6 @@ function bindEvents(){
 
   $("btn-add-hl").onclick=()=>addPlanTask("hl");
   $("btn-add-msg-hl").onclick=()=>addPlanMsg("hl");
-  $("btn-add-msg-social").onclick=()=>addPlanMsg("social");
   $("btn-save-inspire").onclick=addInspire;
   $("socialTopToggle").onclick=toggleSocialTop;
 
