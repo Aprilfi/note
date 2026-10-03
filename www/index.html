@@ -218,6 +218,21 @@ body{
   body{padding-bottom:calc(84px + var(--bu-safe-b))}
 }
 .top-tab-wrap{padding-bottom:calc(8px + var(--bu-safe-b))}
+
+/* ---------- 浮动"新增"圆按钮（心愿 / 复盘 两个 tab 共用） ----------
+   贴在底部导航栏正上方、屏幕右下角；底部导航实测高约 60px，
+   再加上安全区，就不会被手势条或导航栏压住。 */
+.fab-add{
+  position:fixed;right:16px;bottom:calc(68px + var(--bu-safe-b));
+  width:56px;height:56px;padding:0;border:none;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  background:#e878a2;color:#fff;font-size:30px;line-height:1;
+  box-shadow:0 6px 18px #e878a255;z-index:150;cursor:pointer;
+}
+.fab-add:active{background:#d7608e;transform:scale(.95)}
+/* 复盘的"月度花销"图表在最底下，给这两个页面多留一点空间，
+   免得内容被浮起来的按钮盖住 */
+#wish,#review{padding-bottom:64px}
 </style>
 </head>
 <body>
@@ -310,7 +325,6 @@ body{
 
     <div id="wish-cool">
       <div class="stats-hint" id="wishTopStats"></div>
-      <button class="btn-add btn-wide" id="addWishBtn">➕ 新增心愿</button>
       <div class="filter-bar" style="margin-top:10px">
         <select id="wishCategoryFilter">
           <option value="">全部物品分类</option>
@@ -419,6 +433,9 @@ body{
   <button class="top-tab" data-page="review"><span class="bn-ico">🛒</span>复盘</button>
   <button class="top-tab" data-page="setting"><span class="bn-ico">⚙️</span>设置</button>
 </div>
+
+<!-- 浮动新增按钮：只在「心愿」「复盘」两个 tab 显示，具体行为按当前页面分派 -->
+<button class="fab-add" id="fabAdd" style="display:none" aria-label="新增">＋</button>
 
 <!-- ================= 弹窗 ================= -->
 <div class="modal-overlay" id="confirmModal">
@@ -554,7 +571,7 @@ body{
 
 <div class="modal-overlay" id="purchaseEditModal">
 <div class="modal">
-  <h2>💗 编辑购入复盘</h2>
+  <h2 id="purEditTitle">💗 编辑购入复盘</h2>
   <input type="hidden" id="purEditId">
   <div class="form-row">
     <label>物品名称</label>
@@ -1903,33 +1920,45 @@ function quickAddPurchase(gid,row){
   const again=document.querySelector(`.inline-add .ia-name[data-gid="${gid}"]`);
   if(again) again.focus();
 }
+/* 传 id 是编辑，传 null/空是新增（浮动按钮走这条路） */
 function openPurchaseEdit(id){
-  const p=getPurchases().find(x=>x.id===id);
-  if(!p) return;
+  const p=id?getPurchases().find(x=>x.id===id):null;
+  if(id && !p) return;
   const groups=ensurePurchaseGroups().groups;
   $("purEditGroup").innerHTML=groups.map(g=>`<option value="${g.id}">${esc(g.title)}</option>`).join("");
-  $("purEditGroup").value=p.groupId||groups[0].id;
-  $("purEditId").value=p.id;
-  $("purEditName").value=p.name;
-  $("purEditCategory").value=p.category||"other";
-  $("purEditPrice").value=Number(p.price)||0;
-  $("purEditState").value=p.state||"";
-  $("purEditFeel").value=p.feel||"";
+  $("purEditGroup").value=p?(p.groupId||groups[0].id):groups[0].id;
+  $("purEditId").value=p?p.id:"";
+  $("purEditName").value=p?p.name:"";
+  $("purEditCategory").value=p?(p.category||"other"):"other";
+  $("purEditPrice").value=p?(Number(p.price)||0):"";
+  $("purEditState").value=p?(p.state||""):"";
+  $("purEditFeel").value=p?(p.feel||""):"";
+  $("purEditTitle").innerText=p?"💗 编辑购入复盘":"✨ 新增购入复盘";
   $("purchaseEditModal").style.display="flex";
 }
 function savePurchaseEdit(){
   const id=$("purEditId").value;
-  const arr=getPurchases();
-  const idx=arr.findIndex(x=>x.id===id);
-  if(idx<0) return;
   const name=$("purEditName").value.trim();
   if(!name){alert("请填写物品名称");return;}
-  arr[idx].name=name;
-  arr[idx].groupId=$("purEditGroup").value;
-  arr[idx].category=$("purEditCategory").value;
-  arr[idx].price=Number($("purEditPrice").value)||0;
-  arr[idx].state=$("purEditState").value;
-  arr[idx].feel=$("purEditFeel").value.trim();
+  const fields={
+    name:name,
+    groupId:$("purEditGroup").value,
+    category:$("purEditCategory").value,
+    price:Number($("purEditPrice").value)||0,
+    state:$("purEditState").value,
+    feel:$("purEditFeel").value.trim()
+  };
+  const arr=getPurchases();
+  if(id){
+    const idx=arr.findIndex(x=>x.id===id);
+    if(idx<0) return;
+    Object.assign(arr[idx],fields);
+  }else{
+    arr.push(Object.assign({
+      id:uid("pur"),createdAt:new Date().toISOString(),
+      budgetPrice:0,sourceWishId:"",sourceFutureId:""
+    },fields));
+  }
   savePurchases(arr);
   $("purchaseEditModal").style.display="none";
   renderReviewPage();
@@ -2147,6 +2176,9 @@ function switchPage(pageId){
   appState.page=pageId;
   document.querySelectorAll(".top-tab").forEach(b=>b.classList.toggle("active",b.dataset.page===pageId));
   document.querySelectorAll(".page").forEach(p=>p.classList.toggle("active",p.id===pageId));
+  /* 浮动新增按钮只在心愿 / 复盘两个 tab 出现 */
+  const fab=$("fabAdd");
+  if(fab) fab.style.display=(pageId==="wish"||pageId==="review")?"flex":"none";
   refreshPage(pageId);
   window.scrollTo({top:0,behavior:"smooth"});
 }
@@ -2211,7 +2243,12 @@ function bindEvents(){
   $("btn-save-inspire").onclick=addInspire;
   $("socialTopToggle").onclick=toggleSocialTop;
 
-  $("addWishBtn").onclick=()=>openWishModal(null);
+  /* 浮动 + 按钮：当前在哪个 tab 就做那个 tab 的新增 */
+  $("fabAdd").onclick=()=>{
+    if(appState.page==="review"){ openPurchaseEdit(null); return; }
+    if(appState.wishSub==="future"){ openFutureModal(null); return; }
+    openWishModal(null);
+  };
   $("saveEditWishBtn").onclick=saveWishModal;
   $("closeEditWishBtn").onclick=()=>$("wishEditModal").style.display="none";
   $("groupModalSave").onclick=saveGroupModal;
